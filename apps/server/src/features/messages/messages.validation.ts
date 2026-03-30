@@ -25,6 +25,11 @@ export const createMessageSchema = z
     { message: 'Cần ít nhất content hoặc fileUrl', path: ['content'] }
   )
 
+/** Socket `typing:start` / `typing:stop` — chỉ cần room. */
+export const typingConversationPayloadSchema = z.object({
+  conversationId: z.string().cuid(),
+})
+
 /** Socket `chat:send` — cùng rule body với REST + conversationId. */
 export const chatSendPayloadSchema = z
   .object({

@@ -1,6 +1,7 @@
 // Import env FIRST — dotenv.config() must run before any other imports
 import './config/env'
 
+import { initRedis } from './config/redis'
 import express from 'express'
 import http from 'http'
 import cors from 'cors'
@@ -44,13 +45,22 @@ app.use('/api/rooms', messagesRoutes)
 // ─── Global error handler (must be LAST middleware) ───────────────────────────
 app.use(globalErrorHandler)
 
-// ─── Socket.IO ────────────────────────────────────────────────────────────────
-initSocketServer(httpServer)
-
 // ─── Start server ─────────────────────────────────────────────────────────────
-httpServer.listen(env.PORT, () => {
-  console.log(`[Server] Running on http://localhost:${env.PORT}`)
-  console.log(`[Server] Environment: ${env.NODE_ENV}`)
-})
+void (async () => {
+  try {
+    await initRedis()
+    console.log('[Server] Redis connected')
+  } catch (e) {
+    console.error('[Server] Redis required for Socket.IO — kiểm tra REDIS_URL và Redis đang chạy.', e)
+    process.exit(1)
+  }
+
+  initSocketServer(httpServer)
+
+  httpServer.listen(env.PORT, () => {
+    console.log(`[Server] Running on http://localhost:${env.PORT}`)
+    console.log(`[Server] Environment: ${env.NODE_ENV}`)
+  })
+})()
 
 export { app, httpServer }

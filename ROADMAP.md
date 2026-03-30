@@ -70,21 +70,34 @@ Code: `apps/server/src/features/sockets/` (`socketServer.ts`, `socketAuth.middle
 
 ---
 
-**Bước 8 — Redis: Typing indicator & Presence**
+**Bước 8 — Redis: Typing indicator & Presence** ✅
 
-Cài `ioredis` và `@socket.io/redis-adapter`. Typing indicator: client emit `typing:start`, server gọi `redis.setex('typing:conversationId:userId', 3, '1')` (TTL 3 giây), broadcast cho room. Presence: khi connect, `redis.sadd('online_users', userId)`; khi disconnect, `redis.srem`. Redis Adapter cho phép Socket.IO scale ngang nhiều server instance sau này.
+- **Dependencies:** `ioredis`, `@socket.io/redis-adapter`. **`REDIS_URL`** (đã có trong `env`) — Redis **bắt buộc** khi chạy server; khởi động gọi `initRedis()` trước `initSocketServer`; lỗi kết nối → `process.exit(1)`. Dev: Redis trong `infra/docker/docker-compose.yml` (service `redis` port `6379`).
+- **Adapter:** `attachRedisAdapter(io)` — pub/sub clients tách riêng (`duplicate()`); typing/presence dùng client Redis cache riêng (`getRedisCache()`).
+- **Typing:** Client emit **`typing:start`** / **`typing:stop`** với `{ conversationId }` (Zod CUID). Server kiểm tra participant (cùng logic `messagesRepository.findParticipant`). **`SETEX`** key `typing:{conversationId}:{userId}` TTL **3s** (start); **`DEL`** key (stop). Broadcast **`socket.broadcast.to(conversationId)`** — **`typing:start`** / **`typing:stop`** payload `{ conversationId, userId }` (không gửi lại người gõ). Lỗi → **`chat:error`**.
+- **Presence (multi-tab):** Key **`presence:user:{userId}`** — **`INCR`** khi socket connect (sau join room), **`DECR`** khi disconnect; chỉ broadcast **`presence:online`** khi counter **1 → lần đầu**; **`presence:offline`** khi **0** (và xóa key). **`io.emit`** toàn cục (global online/offline).
+- **Client:** Zustand **`useTypingPresenceStore`**; hook **`useTypingPresenceRealtime`** (subscribe + log DEV); helper **`emitTypingStart` / `emitTypingStop`** (`typingPresenceSocket.ts`); reset khi logout. **`SocketBootstrap`** gọi thêm hook này cùng `useChatRealtime`.
+- **Constants:** `packages/shared-constants/src/socket-events.ts` — **`SOCKET_EVENTS`** (`chat:*`, `typing:*`, `presence:*`).
+
+Code: `apps/server/src/config/redis.ts`, `features/sockets/setupRedisAdapter.ts`, `typingPresence.handlers.ts`; client `features/sockets/` (`typingPresence.store.ts`, `useTypingPresenceRealtime.ts`, `typingPresenceSocket.ts`).
 
 ---
 
-**Bước 9 — Read receipts & Unread count**
+**Bước 9 — Read receipts & Unread count** ✅
 
-Khi user mở một room, emit `room:read` với **`conversationId`**. Server cập nhật **`ConversationParticipant.lastReadAt`** (và/hoặc `MessageRead` tùy thiết kế). Unread đã dùng trong **GET /rooms**; có thể bổ sung broadcast **`receipt:read`** cho UI tick.
+- **Nguồn sự thật:** Chỉ cập nhật **`ConversationParticipant.lastReadAt`** (không ghi **`MessageRead`** per-message trong bước này). Giá trị: **`max(now, createdAt của tin nhắn mới nhất trong room)`** (nếu chưa có tin thì tương đương `now`).
+- **REST:** **`PATCH /api/rooms/:id/read`** (auth), response `{ lastReadAt: ISO string }`. Sau khi ghi DB, **`io.to(conversationId).emit('receipt:read', { conversationId, userId, lastReadAt })`** — mọi socket trong room (kể cả người vừa đọc) để invalidate danh sách.
+- **Socket:** Client emit **`room:read`** với **`{ conversationId }`** (Zod CUID, cùng schema typing). **`roomsService.markRoomAsRead`** → **`emitReceiptReadToRoom`** giống REST; có **ack** tùy chọn `{ ok: true, lastReadAt }` / lỗi qua **`chat:error`**.
+- **Unread:** Vẫn từ **GET /rooms** (`countUnreadMessages` so với `lastReadAt`).
+- **Client:** Query key **`roomsKeys.all`**; **`useRoomsQuery()`**; **`useReceiptRealtime`** — `invalidateQueries` khi nhận **`receipt:read`**; **`useRoomReadSync(socket, connected, conversationId)`** — debounce **300ms**, ưu tiên **`PATCH /read`**, fallback **`room:read`** + ack nếu PATCH lỗi; kích hoạt khi đổi room / **`chat:new`** trong room đang mở / **`window` focus**. **`SocketBootstrap`** gọi receipt + sync với **`conversationId: null`** cho tới khi có màn chat (Bước 10 truyền id thật).
+
+Code: `rooms.repository` (`findLastMessageCreatedAt`, `updateParticipantLastReadAt`), `rooms.service` (`markRoomAsRead`), `rooms.controller` + route **`PATCH /:id/read`**, `receiptBroadcast.ts`, `roomRead.handlers.ts`; client `features/rooms/` (`rooms.keys`, `queries/rooms.queries`, `useReceiptRealtime`, `useRoomReadSync`).
 
 ---
 
 **Bước 10 — Frontend real-time client (hoàn thiện UI)**
 
-Hook **`useSocket()`** đã có; **`chat:new`** đã đưa tin vào Zustand. Bước này mở rộng: TanStack Query làm initial fetch (rooms, history), merge với store realtime; lắng nghe thêm typing/presence khi có Bước 8–9. Pattern: Query = state server, Zustand = patch realtime.
+Hook **`useSocket()`** đã có; **`chat:new`** đã đưa tin vào Zustand; typing/presence đã có store + **`useTypingPresenceRealtime`** (Bước 8); read receipts đã có **`useReceiptRealtime`** + **`useRoomReadSync`** (Bước 9). Bước này mở rộng: TanStack Query làm initial fetch (rooms, history), merge với store realtime; bổ sung UI (sidebar, composer, typing line…) và truyền **`conversationId`** vào **`useRoomReadSync`**. Pattern: Query = state server, Zustand = patch realtime.
 
 ---
 
@@ -116,7 +129,7 @@ Pin: có thể thêm bảng `PinnedMessage` (`conversationId`, `messageId`, `pin
 
 **Bước 15 — Push notifications**
 
-BullMQ + Redis làm queue. Khi có message mới, enqueue job `notify:message`. Worker xử lý: lấy danh sách member offline (không có trong Redis `online_users`), gửi Web Push qua `web-push` library hoặc FCM payload. Frontend đăng ký service worker, lưu `PushSubscription` vào server. User nhận notification dù đang đóng tab.
+BullMQ + Redis làm queue. Khi có message mới, enqueue job `notify:message`. Worker xử lý: lấy danh sách member offline (không còn kết nối — có thể kiểm tra key **`presence:user:{userId}`** = 0 / không tồn tại, cùng mô hình Bước 8), gửi Web Push qua `web-push` library hoặc FCM payload. Frontend đăng ký service worker, lưu `PushSubscription` vào server. User nhận notification dù đang đóng tab.
 
 ---
 

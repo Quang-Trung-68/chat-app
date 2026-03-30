@@ -51,6 +51,18 @@ export const roomsRepository = {
     })
   },
 
+  async findLastMessageCreatedAt(conversationId: string): Promise<Date | null> {
+    const m = await prisma.message.findFirst({
+      where: {
+        conversationId,
+        deletedAt: null,
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      select: { createdAt: true },
+    })
+    return m?.createdAt ?? null
+  },
+
   async findLastMessagePerConversation(conversationIds: string[]) {
     type LastRow = {
       id: string
@@ -156,6 +168,19 @@ export const roomsRepository = {
       })
 
       return { conversation, participants }
+    })
+  },
+
+  updateParticipantLastReadAt(userId: string, conversationId: string, lastReadAt: Date) {
+    return prisma.conversationParticipant.update({
+      where: {
+        conversationId_userId: {
+          conversationId,
+          userId,
+        },
+      },
+      data: { lastReadAt },
+      select: { lastReadAt: true },
     })
   },
 }

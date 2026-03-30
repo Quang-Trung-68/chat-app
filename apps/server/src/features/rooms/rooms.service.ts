@@ -1,5 +1,6 @@
 import type { MessageType } from '@prisma/client'
 import { AppError } from '@/shared/errors/AppError'
+import { messagesRepository } from '@/features/messages/messages.repository'
 import { roomsRepository } from './rooms.repository'
 import type {
   CreateGroupBody,
@@ -121,5 +122,23 @@ export const roomsService = {
         role: p.role,
       })),
     }
+  },
+
+  /**
+   * Cập nhật `lastReadAt` (không ghi `MessageRead` per-message).
+   * `lastReadAt = max(now, createdAt tin nhắn mới nhất)` để khớp unread.
+   */
+  async markRoomAsRead(userId: string, conversationId: string): Promise<Date> {
+    const participant = await messagesRepository.findParticipant(userId, conversationId)
+    if (!participant) {
+      throw new AppError('Không có quyền trong room này', 403, 'FORBIDDEN')
+    }
+
+    const latest = await roomsRepository.findLastMessageCreatedAt(conversationId)
+    const now = new Date()
+    const lastReadAt = new Date(Math.max(now.getTime(), latest?.getTime() ?? 0))
+
+    await roomsRepository.updateParticipantLastReadAt(userId, conversationId, lastReadAt)
+    return lastReadAt
   },
 }

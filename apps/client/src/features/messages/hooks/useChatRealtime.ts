@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import type { Socket } from 'socket.io-client'
+import { SOCKET_EVENTS } from '@chat-app/shared-constants'
 import type { MessageItemDto } from '../types/message.types'
 import { useRealtimeMessagesStore } from '../store/realtimeMessages.store'
 
@@ -42,12 +43,12 @@ export function useChatRealtime(socket: Socket | null, connected: boolean) {
       }
     }
 
-    socket.on('chat:new', onNew)
-    socket.on('chat:error', onError)
+    socket.on(SOCKET_EVENTS.CHAT_NEW, onNew)
+    socket.on(SOCKET_EVENTS.CHAT_ERROR, onError)
 
     return () => {
-      socket.off('chat:new', onNew)
-      socket.off('chat:error', onError)
+      socket.off(SOCKET_EVENTS.CHAT_NEW, onNew)
+      socket.off(SOCKET_EVENTS.CHAT_ERROR, onError)
     }
   }, [socket, connected, appendFromSocket])
 }

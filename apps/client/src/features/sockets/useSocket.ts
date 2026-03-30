@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { io, type Socket } from 'socket.io-client'
 import { useAuthStore } from '@/features/auth/store/auth.store'
 import { useRealtimeMessagesStore } from '@/features/messages/store/realtimeMessages.store'
+import { useTypingPresenceStore } from '@/features/sockets/typingPresence.store'
 
 /**
  * Kết nối Socket.IO khi đã đăng nhập (cookie accessToken).
@@ -16,6 +17,7 @@ export function useSocket() {
   useEffect(() => {
     if (!isAuthenticated) {
       useRealtimeMessagesStore.getState().reset()
+      useTypingPresenceStore.getState().reset()
       setSocket((prev) => {
         prev?.close()
         return null

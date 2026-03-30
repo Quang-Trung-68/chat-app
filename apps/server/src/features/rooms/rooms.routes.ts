@@ -9,5 +9,6 @@ router.use(authenticate)
 
 router.get('/', controller.listRooms)
 router.post('/', validate(createGroupSchema), controller.createGroup)
+router.patch('/:id/read', controller.markRoomRead)
 
 export default router
