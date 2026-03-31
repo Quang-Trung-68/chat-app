@@ -1,22 +1,31 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import type { InfiniteData } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { usePendingImageUploadsStore } from '@/features/messages/store/pendingImageUploads.store'
-import { ChevronDown, PanelRight, Search, UserPlus, Video } from 'lucide-react'
+import { ChevronDown, Loader2, PanelRight, Search, UserPlus, Video } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useSocket } from '@/features/sockets/useSocket'
 import { useRoomReadSync } from '@/features/rooms/hooks/useRoomReadSync'
-import { useRoomMessagesInfinite } from '@/features/messages/queries/useRoomMessagesInfinite'
+import type { MessagesPageDto } from '@/features/messages/api/messages.api'
+import {
+  messagesInfiniteKeys,
+  useRoomMessagesInfinite,
+} from '@/features/messages/queries/useRoomMessagesInfinite'
 import { useMergedRoomMessages } from '@/features/messages/hooks/useMergedRoomMessages'
 import { useTypingPresenceStore } from '@/features/sockets/typingPresence.store'
 import type { RoomListItem } from '@/features/rooms/types/room.types'
 import type { MessageItemDto } from '@/features/messages/types/message.types'
 import { getDmMentionLine, getRoomTitle } from '../utils/roomTitle'
 import { formatDaySeparator, formatMessageTime } from '../utils/format'
-import { ChatComposer } from './ChatComposer'
+import { resolveParentPreview } from '../utils/parentPreview'
+import { ChatComposer, type ChatComposerHandle } from './ChatComposer'
 import { ImagePreviewLightbox } from './ImagePreviewLightbox'
 import { MessageImageGrid } from './MessageImageGrid'
+import { MessageQuote } from './MessageQuote'
 import { MessageReactionHoverLayer } from './MessageReactions'
+import { useRealtimeMessagesStore } from '@/features/messages/store/realtimeMessages.store'
 import { cn } from '@/lib/utils'
 import { EMPTY_STRING_ARRAY } from '@/lib/zustandEmpty'
 import { displayNameForMessageSender, userDisplayName } from '@/lib/userDisplay'
@@ -49,6 +58,13 @@ function groupMessagesByDay(messages: MessageItemDto[]) {
 function sortedAttachmentUrls(m: MessageItemDto): string[] {
   if (!m.attachments?.length) return []
   return [...m.attachments].sort((a, b) => a.sortOrder - b.sortOrder).map((a) => a.url)
+}
+
+function imageCountForMessage(m: MessageItemDto): number {
+  const urls = sortedAttachmentUrls(m)
+  if (urls.length > 0) return urls.length
+  if (m.fileUrl && m.fileType === 'IMAGE') return 1
+  return 0
 }
 
 export function ChatThread({
@@ -95,9 +111,103 @@ export function ChatThread({
   const groups = useMemo(() => groupMessagesByDay(merged), [merged])
   const mergedTailId = merged[merged.length - 1]?.id ?? ''
 
+  const queryClient = useQueryClient()
   const scrollRef = useRef<HTMLDivElement>(null)
+  const messagesContentRef = useRef<HTMLDivElement>(null)
+  const composerRef = useRef<ChatComposerHandle>(null)
   const infiniteRef = useRef(infinite)
   infiniteRef.current = infinite
+
+  const [replyingTo, setReplyingTo] = useState<MessageItemDto | null>(null)
+  const [isLoadingParentScroll, setIsLoadingParentScroll] = useState(false)
+  const [parentNavError, setParentNavError] = useState<string | null>(null)
+
+  const messageInRoomCache = useCallback(
+    (messageId: string) => {
+      const data = queryClient.getQueryData<InfiniteData<MessagesPageDto>>(
+        messagesInfiniteKeys.room(conversationId)
+      )
+      if (data?.pages.some((p) => p.messages.some((msg) => msg.id === messageId))) return true
+      const rt = useRealtimeMessagesStore.getState().byConversation[conversationId] ?? []
+      return rt.some((msg) => msg.id === messageId)
+    },
+    [conversationId, queryClient]
+  )
+
+  const scrollToMessageInThread = useCallback(
+    async (targetId: string) => {
+      const scrollOnce = () => {
+        const root = scrollRef.current
+        if (!root) return false
+        const escaped =
+          typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+            ? CSS.escape(targetId)
+            : targetId
+        const el = root.querySelector(`[data-message-id="${escaped}"]`)
+        if (el instanceof HTMLElement) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          return true
+        }
+        return false
+      }
+
+      if (scrollOnce()) return
+
+      if (!messageInRoomCache(targetId)) {
+        setIsLoadingParentScroll(true)
+        setParentNavError(null)
+        try {
+          let safety = 0
+          while (!messageInRoomCache(targetId) && safety < 120) {
+            safety += 1
+            const q = infiniteRef.current
+            if (!q.hasNextPage) break
+            if (q.isFetchingNextPage) {
+              await new Promise((r) => setTimeout(r, 40))
+              continue
+            }
+            await q.fetchNextPage()
+          }
+          if (!messageInRoomCache(targetId)) {
+            setParentNavError('Không tìm thấy tin nhắn gốc trong đoạn đã tải.')
+            window.setTimeout(() => setParentNavError(null), 4000)
+            return
+          }
+        } finally {
+          setIsLoadingParentScroll(false)
+        }
+      }
+
+      for (let i = 0; i < 50; i++) {
+        await new Promise<void>((r) => requestAnimationFrame(() => r()))
+        if (scrollOnce()) return
+      }
+      setParentNavError('Không cuộn tới được tin nhắn gốc.')
+      window.setTimeout(() => setParentNavError(null), 4000)
+    },
+    [messageInRoomCache]
+  )
+
+  useEffect(() => {
+    setReplyingTo(null)
+  }, [conversationId])
+
+  /** Focus ô nhập khi chọn hội thoại khác. */
+  useEffect(() => {
+    const id = requestAnimationFrame(() =>
+      requestAnimationFrame(() => composerRef.current?.focus())
+    )
+    return () => cancelAnimationFrame(id)
+  }, [conversationId])
+
+  /** Focus ô nhập khi bấm Trả lời. */
+  useEffect(() => {
+    if (!replyingTo) return
+    const id = requestAnimationFrame(() =>
+      requestAnimationFrame(() => composerRef.current?.focus())
+    )
+    return () => cancelAnimationFrame(id)
+  }, [replyingTo])
   /** Đồng bộ với isNearBottom — dùng trong effect tin mới (tránh stale). */
   const isNearBottomRef = useRef(true)
   const prevLastMsgIdRef = useRef<string | null>(null)
@@ -184,6 +294,24 @@ export function ChatThread({
     return () => el.removeEventListener('scroll', handler)
   }, [conversationId, updateScrollState])
 
+  /**
+   * Khi nội dung (ảnh) làm scrollHeight tăng — nếu user đang ở gần đáy thì bám đáy
+   * (mở room có tin ảnh cuối, upload ảnh xong, đối phương gửi ảnh khi mình đang gần đáy).
+   */
+  useEffect(() => {
+    const root = scrollRef.current
+    const content = messagesContentRef.current
+    if (!root || !content || !initialRevealDone) return
+    const ro = new ResizeObserver(() => {
+      if (!isNearBottomRef.current) return
+      root.scrollTop = root.scrollHeight
+      const last = mergedRef.current[mergedRef.current.length - 1]
+      setAnchorAtBottomId(last?.id ?? null)
+    })
+    ro.observe(content)
+    return () => ro.disconnect()
+  }, [conversationId, initialRevealDone, merged.length])
+
   /** Đang ở đáy: neo theo tin mới nhất (gửi/nhận). */
   useEffect(() => {
     if (!initialRevealDone || !isNearBottom) return
@@ -239,20 +367,23 @@ export function ChatThread({
       : `${labels.join(', ')} đang nhập…`
   }, [typingOthers, room?.participants])
 
-  /** Giữa khung: chỉ mũi tên / preview tin (không gồm đang nhập — đang nhập ở góc dưới trái). */
+  /** Giữa khung: mũi tên / preview tin (tin chỉ ảnh: “… đã gửi N ảnh”). */
   const floatingCenterUi = useMemo(() => {
-    if (
-      lastMsg &&
-      anchorAtBottomId !== null &&
-      lastMsg.id !== anchorAtBottomId &&
-      !isNearBottom
-    ) {
+    if (isNearBottom || !lastMsg) return null
+    if (anchorAtBottomId !== null && lastMsg.id !== anchorAtBottomId) {
       const name = displayNameForMessageSender(lastMsg.sender, room?.participants)
-      const prev = (lastMsg.content ?? '').trim().slice(0, 48) || '…'
-      return { kind: 'text' as const, text: `${name}: ${prev}` }
+      const text = (lastMsg.content ?? '').trim()
+      const nImg = imageCountForMessage(lastMsg)
+      if (text) {
+        return { kind: 'text' as const, text: `${name}: ${text.slice(0, 48)}` }
+      }
+      if (nImg > 0) {
+        const photoLabel = nImg === 1 ? '1 ảnh' : `${nImg} ảnh`
+        return { kind: 'text' as const, text: `${name} đã gửi ${photoLabel}` }
+      }
+      return { kind: 'arrow' as const, text: '' }
     }
-    if (!isNearBottom) return { kind: 'arrow' as const, text: '' }
-    return null
+    return { kind: 'arrow' as const, text: '' }
   }, [lastMsg, anchorAtBottomId, isNearBottom, room?.participants])
 
   const showFloatingCenter =
@@ -321,6 +452,15 @@ export function ChatThread({
           ref={scrollRef}
           className="relative h-full min-h-0 scroll-auto overflow-y-auto bg-stone-100/90 px-4 py-3 dark:bg-stone-900/20"
         >
+          {isLoadingParentScroll ? (
+            <div
+              className="pointer-events-auto absolute inset-0 z-20 flex items-center justify-center bg-background/45 backdrop-blur-[2px] transition-opacity duration-200 motion-reduce:backdrop-blur-none"
+              aria-busy
+              aria-label="Đang tải tin nhắn cũ"
+            >
+              <Loader2 className="h-9 w-9 animate-spin text-muted-foreground" aria-hidden />
+            </div>
+          ) : null}
           {!infinite.isLoading && merged.length === 0 && initialRevealDone ? (
             <p
               className={cn(
@@ -338,6 +478,7 @@ export function ChatThread({
 
           {!infinite.isLoading && merged.length > 0 ? (
             <div
+              ref={messagesContentRef}
               key={conversationId}
               className={cn(
                 initialRevealDone &&
@@ -356,9 +497,11 @@ export function ChatThread({
                     {g.items.map((m) => {
                       const mine = m.sender.id === currentUserId
                       const senderLabel = displayNameForMessageSender(m.sender, room?.participants)
+                      const parentPreview = resolveParentPreview(m, merged)
                       return (
                         <li
                           key={m.id}
+                          data-message-id={m.id}
                           className={cn('flex gap-2', mine ? 'flex-row-reverse' : 'flex-row')}
                         >
                           {!mine ? (
@@ -392,6 +535,19 @@ export function ChatThread({
                                   : 'border border-border bg-white text-foreground'
                               )}
                             >
+                              {parentPreview ? (
+                                <div className={cn('mb-2', !mine && '-mx-0.5')}>
+                                  <MessageQuote
+                                    preview={parentPreview}
+                                    mine={mine}
+                                    onNavigate={
+                                      parentPreview.isDeleted
+                                        ? undefined
+                                        : () => void scrollToMessageInThread(parentPreview.id)
+                                    }
+                                  />
+                                </div>
+                              ) : null}
                               {!mine ? (
                                 <p className="mb-1 text-xs text-muted-foreground">{senderLabel}</p>
                               ) : null}
@@ -434,14 +590,26 @@ export function ChatThread({
                                   </div>
                                 )
                               })()}
-                              <p
+                              <div
                                 className={cn(
-                                  'mt-1 text-[10px]',
+                                  'mt-1 flex items-center justify-between gap-2 text-[10px]',
                                   mine ? 'text-primary-foreground/80' : 'text-muted-foreground'
                                 )}
                               >
-                                {formatMessageTime(m.createdAt)}
-                              </p>
+                                <span>{formatMessageTime(m.createdAt)}</span>
+                                <button
+                                  type="button"
+                                  className={cn(
+                                    'shrink-0 rounded px-1.5 py-0.5 opacity-0 transition-opacity duration-150 group-hover/msg:opacity-100',
+                                    mine
+                                      ? 'text-primary-foreground/90 hover:bg-white/15 hover:underline'
+                                      : 'text-primary hover:bg-primary/10 hover:underline'
+                                  )}
+                                  onClick={() => setReplyingTo(m)}
+                                >
+                                  Trả lời
+                                </button>
+                              </div>
                             </div>
                             <MessageReactionHoverLayer
                               message={m}
@@ -501,6 +669,12 @@ export function ChatThread({
           </div>
         ) : null}
 
+        {parentNavError ? (
+          <div className="pointer-events-none absolute bottom-16 left-1/2 z-30 max-w-[min(100%,20rem)] -translate-x-1/2 rounded-md bg-destructive/95 px-3 py-1.5 text-center text-xs text-destructive-foreground shadow-md motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-200">
+            {parentNavError}
+          </div>
+        ) : null}
+
         {showFloatingCenter && floatingCenterUi ? (
           <div
             className={cn(
@@ -528,11 +702,14 @@ export function ChatThread({
       </div>
 
       <ChatComposer
+        ref={composerRef}
         conversationId={conversationId}
         socket={socket}
         connected={connected}
         currentUserId={currentUserId}
         roomTitle={title}
+        replyingTo={replyingTo}
+        onReplyingToChange={setReplyingTo}
         onAfterSend={() => scrollToBottom('smooth')}
       />
 

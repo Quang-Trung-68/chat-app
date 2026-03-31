@@ -18,6 +18,15 @@ export interface ReactionSummaryItem {
   count: number
 }
 
+export interface ParentMessagePreviewDto {
+  id: string
+  contentSnippet: string | null
+  hasAttachments: boolean
+  firstAttachmentUrl: string | null
+  sender: MessageSenderDto
+  isDeleted: boolean
+}
+
 export interface MessageItemDto {
   id: string
   content: string | null
@@ -28,5 +37,6 @@ export interface MessageItemDto {
   myReactionEmoji: string | null
   createdAt: string
   parentMessageId: string | null
+  parentPreview: ParentMessagePreviewDto | null
   sender: MessageSenderDto
 }

@@ -20,6 +20,17 @@ export interface ReactionSummaryDto {
   count: number
 }
 
+/** Trích dẫn tin cha (reply) — gửi kèm mỗi message khi có `parentMessageId`. */
+export interface ParentMessagePreviewDto {
+  id: string
+  /** Rút gọn nội dung; null nếu chỉ ảnh / không có chữ. */
+  contentSnippet: string | null
+  hasAttachments: boolean
+  firstAttachmentUrl: string | null
+  sender: MessageSenderDto
+  isDeleted: boolean
+}
+
 /** Payload broadcast `chat:reaction:updated` — client gom summary + tính `myReactionEmoji` từ `reactions`. */
 export interface ReactionUpdatedPayload {
   conversationId: string
@@ -41,6 +52,8 @@ export interface MessageItemDto {
   myReactionEmoji: string | null
   createdAt: Date
   parentMessageId: string | null
+  /** null nếu không reply hoặc không load được parent. */
+  parentPreview: ParentMessagePreviewDto | null
   sender: MessageSenderDto
 }
 

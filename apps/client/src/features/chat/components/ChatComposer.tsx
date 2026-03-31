@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { Socket } from 'socket.io-client'
 import { Image, Loader2, Paperclip, Smile, ThumbsUp, X } from 'lucide-react'
@@ -19,25 +26,42 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { cn } from '@/lib/utils'
 import { usePendingImageUploadsStore } from '@/features/messages/store/pendingImageUploads.store'
 
+export type ChatComposerHandle = {
+  focus: () => void
+}
+
 type ChatComposerProps = {
   conversationId: string
   socket: Socket | null
   connected: boolean
   currentUserId: string | undefined
   roomTitle: string
+  replyingTo: MessageItemDto | null
+  onReplyingToChange: (next: MessageItemDto | null) => void
   onAfterSend?: () => void
 }
 
 type PendingImg = { key: string; file: File; url: string }
 
-export function ChatComposer({
-  conversationId,
-  socket,
-  connected,
-  currentUserId,
-  roomTitle,
-  onAfterSend,
-}: ChatComposerProps) {
+export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
+  function ChatComposer(
+    {
+      conversationId,
+      socket,
+      connected,
+      currentUserId,
+      roomTitle,
+      replyingTo,
+      onReplyingToChange,
+      onAfterSend,
+    },
+    ref
+  ) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  useImperativeHandle(ref, () => ({
+    focus: () => inputRef.current?.focus(),
+  }))
+
   const [text, setText] = useState('')
   const [pending, setPending] = useState<PendingImg[]>([])
   const [uploadError, setUploadError] = useState<{
@@ -73,6 +97,8 @@ export function ChatComposer({
       return []
     })
     setUploadError(null)
+    onReplyingToChange(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ reset khi đổi room; setReplyingTo ổn định
   }, [conversationId])
 
   useEffect(() => {
@@ -136,6 +162,7 @@ export function ChatComposer({
     const body = {
       ...(c ? { content: c } : {}),
       ...(files.length > 0 ? { plannedImageCount: files.length } : {}),
+      ...(replyingTo ? { parentMessageId: replyingTo.id } : {}),
     }
 
     const filesSnapshot = [...files]
@@ -169,6 +196,7 @@ export function ChatComposer({
       }
 
       setText('')
+      onReplyingToChange(null)
       if (filesSnapshot.length > 0) {
         const previewUrls = pending.map((p) => p.url)
         registerPendingUploads(message.id, previewUrls)
@@ -194,6 +222,7 @@ export function ChatComposer({
       /* lỗi tạo tin */
     } finally {
       setSending(false)
+      requestAnimationFrame(() => inputRef.current?.focus())
     }
   }
 
@@ -206,6 +235,7 @@ export function ChatComposer({
       await queryClient.invalidateQueries({
         queryKey: messagesInfiniteKeys.room(conversationId),
       })
+      requestAnimationFrame(() => inputRef.current?.focus())
     } catch {
       /* giữ uploadError */
     } finally {
@@ -216,6 +246,28 @@ export function ChatComposer({
   return (
     <TooltipProvider delayDuration={300}>
       <div className="relative shrink-0 border-t border-border bg-white px-3 py-2 dark:bg-background">
+        {replyingTo ? (
+          <div className="mb-2 flex items-start gap-2 rounded-lg border border-border bg-muted/40 px-2 py-1.5 text-xs">
+            <div className="min-w-0 flex-1 border-l-2 border-primary pl-2">
+              <p className="font-medium text-foreground">
+                {replyingTo.sender.displayName?.trim() || replyingTo.sender.username}
+              </p>
+              <p className="line-clamp-2 text-muted-foreground">
+                {(replyingTo.content ?? '').trim().slice(0, 160) ||
+                  (replyingTo.attachments?.length || replyingTo.fileUrl ? 'Ảnh' : '…')}
+              </p>
+            </div>
+            <button
+              type="button"
+              className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+              onClick={() => onReplyingToChange(null)}
+              aria-label="Bỏ trả lời"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        ) : null}
+
         {uploadError ? (
           <div className="mb-2 flex flex-wrap items-center gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-2 py-1.5 text-xs text-destructive">
             <span>Ảnh chưa tải lên được. Tin văn bản đã gửi.</span>
@@ -296,6 +348,7 @@ export function ChatComposer({
         </div>
         <div className="flex items-end gap-2">
           <Input
+            ref={inputRef}
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder={`Nhập @, tin nhắn tới ${roomTitle}`}
@@ -335,4 +388,5 @@ export function ChatComposer({
       </div>
     </TooltipProvider>
   )
-}
+  }
+)

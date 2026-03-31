@@ -129,18 +129,20 @@ Code: `apps/server/src/config/upload.config.ts`, `cloudinary.client.ts`, `featur
 
 **Bước 12 — Emoji reactions** ✅
 
-- **Schema (Prisma):** bảng **`reactions`** — `messageId`, `userId`, `emoji`. **`@@unique([messageId, userId])`** — một user một emoji / tin; migration `20260330180000_reaction_one_per_user_per_message`.
-- **API:** **`POST /api/messages/:messageId/reactions`** — body `{ emoji }`; tập **`ALLOWED_REACTION_EMOJIS`** trong **`packages/shared-constants/reaction-emojis.ts`**. Toggle: cùng emoji → xóa; khác → cập nhật.
-- **Realtime:** **`chat:reaction:updated`** (`SOCKET_EVENTS.CHAT_REACTION_UPDATED`) — **`summary`** + **`reactions: { userId, emoji }[]`**; client tính **`myReactionEmoji`** theo user đăng nhập.
-- **Client:** chip dưới bubble + nút **+** (popover); **`applyReactionPatch`** (TanStack infinite + Zustand); **`useChatRealtime`** lắng nghe reaction.
+- **Schema (Prisma):** bảng **`reactions`** — `messageId`, `userId`, `emoji`, `createdAt`. **`@@unique([messageId, userId])`** — một user một emoji / tin; migration `20260330180000_reaction_one_per_user_per_message`.
+- **API:** **`POST /api/messages/:messageId/reactions`** — body `{ emoji }`; tập **`ALLOWED_REACTION_EMOJIS`** trong **`packages/shared-constants/reaction-emojis.ts`**. Toggle: cùng emoji → xóa; khác → cập nhật (cập nhật `createdAt` để sort tóm tắt theo mới nhất).
+- **Realtime:** **`chat:reaction:updated`** (`SOCKET_EVENTS.CHAT_REACTION_UPDATED`) — **`reactionSummary`** + **`reactions: { userId, emoji }[]`**; client tính **`myReactionEmoji`** theo user đăng nhập.
+- **Client:** **`MessageReactionHoverLayer`** dưới bubble — pill tối (tối đa 3 loại + tổng), nút tròn trắng (Like xám hoặc emoji của mình), menu nhanh / lưới neo sát nút; tin mình căn phải / tin người khác căn trái; **`applyReactionPatch`** (TanStack infinite + Zustand); **`useChatRealtime`** lắng nghe reaction.
 
 Code: server `messageReactions.routes.ts`, `messageReactions.controller.ts`, `messages.service` (`setReaction`), `messages.repository`, `chatMessageBroadcast` (`emitReactionUpdated`); client `MessageReactions.tsx`, `reactions/applyReactionPatch.ts`, `useChatRealtime`, `messages.api` (`postMessageReaction`).
 
 ---
 
-**Bước 13 — Reply & Thread**
+**Bước 13 — Reply & Thread** ✅
 
-Cột `parentId` trong `Message` — self-referencing FK. REST + **`chat:send`** đã hỗ trợ `parentMessageId`. Bổ sung UI thread / `GET /messages/:id/thread` nếu cần.
+- **Backend:** `Message.parentId`; **`POST /api/rooms/:id/messages`** + **`chat:send`** với **`parentMessageId`**; mỗi tin trong list trả về **`parentPreview`** (snippet, ảnh đại diện, sender, `isDeleted`) khi có reply — join **`parent`** trong `messageListSelect`.
+- **Client:** Nút **Trả lời** (hover trên bubble), quote phía trên nội dung, preview trong **ChatComposer**, gửi kèm **`parentMessageId`**; click quote → cuộn mượt tới tin cha; nếu tin cha chưa trong cache → **`fetchNextPage`** lặp (overlay + spinner) tới khi tìm thấy hoặc hết trang; fallback **`resolveParentPreview`** từ danh sách đã merge khi thiếu embed.
+- **Chưa làm (tùy chọn):** **`GET /api/messages/:messageId/thread`** và panel thread kiểu Slack — không cần cho luồng quote inline.
 
 ---
 

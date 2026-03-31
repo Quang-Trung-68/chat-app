@@ -8,6 +8,7 @@ import {
   type CreateMessageBody,
   type MessageItemDto,
   type MessagesPageDto,
+  type ParentMessagePreviewDto,
   type ReactionSummaryDto,
   type ReactionUpdatedPayload,
 } from './messages.types'
@@ -56,6 +57,49 @@ function buildReactionBroadcastPayload(
   }
 }
 
+function snippetText(s: string, max: number): string {
+  const t = s.trim()
+  if (t.length <= max) return t
+  return `${t.slice(0, Math.max(0, max - 1))}…`
+}
+
+function buildParentPreview(parent: {
+  id: string
+  content: string | null
+  fileUrl: string | null
+  type: MT
+  deletedAt: Date | null
+  sender: {
+    id: string
+    username: string
+    displayName: string
+    avatarUrl: string | null
+  }
+  attachments: { url: string }[]
+}): ParentMessagePreviewDto {
+  const isDeleted = parent.deletedAt !== null
+  const firstUrl =
+    parent.attachments[0]?.url ??
+    (parent.fileUrl && parent.type === 'IMAGE' ? parent.fileUrl : null)
+  const hasAttachments =
+    Boolean(firstUrl) || parent.type === 'IMAGE' || parent.attachments.length > 0
+  const contentSnippet =
+    !isDeleted && parent.content?.trim() ? snippetText(parent.content.trim(), 88) : null
+  return {
+    id: parent.id,
+    contentSnippet,
+    hasAttachments,
+    firstAttachmentUrl: firstUrl,
+    sender: {
+      id: parent.sender.id,
+      username: parent.sender.username,
+      displayName: parent.sender.displayName,
+      avatarUrl: parent.sender.avatarUrl,
+    },
+    isDeleted,
+  }
+}
+
 function resolveMessageType(body: CreateMessageBody): MT {
   const hasFile = body.fileUrl !== undefined && body.fileUrl.trim().length > 0
   if (hasFile) {
@@ -78,6 +122,20 @@ function mapRowToDto(
     type: MT
     createdAt: Date
     parentId: string | null
+    parent: {
+      id: string
+      content: string | null
+      fileUrl: string | null
+      type: MT
+      deletedAt: Date | null
+      sender: {
+        id: string
+        username: string
+        displayName: string
+        avatarUrl: string | null
+      }
+      attachments: { url: string }[]
+    } | null
     sender: {
       id: string
       username: string
@@ -90,6 +148,8 @@ function mapRowToDto(
   viewerId: string
 ): MessageItemDto {
   const { reactionSummary, myReactionEmoji } = buildReactionSummaryFromRows(m.reactions, viewerId)
+  const parentPreview =
+    m.parentId && m.parent ? buildParentPreview(m.parent) : null
   return {
     id: m.id,
     content: m.content,
@@ -104,6 +164,7 @@ function mapRowToDto(
     myReactionEmoji,
     createdAt: m.createdAt,
     parentMessageId: m.parentId,
+    parentPreview,
     sender: {
       id: m.sender.id,
       username: m.sender.username,

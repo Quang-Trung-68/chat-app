@@ -41,11 +41,20 @@ export async function fetchMessagesPage(
 }
 
 export function normalizeMessagePayload(m: MessageItemDto): MessageItemDto {
+  const parentPreview =
+    m.parentPreview && typeof m.parentPreview === 'object'
+      ? {
+          ...m.parentPreview,
+          sender: normalizeMessageSender(m.parentPreview.sender as MessageSenderPayload),
+        }
+      : null
   return {
     ...m,
     attachments: Array.isArray(m.attachments) ? m.attachments : [],
     reactionSummary: Array.isArray(m.reactionSummary) ? m.reactionSummary : [],
     myReactionEmoji: m.myReactionEmoji ?? null,
+    parentMessageId: m.parentMessageId ?? null,
+    parentPreview,
     createdAt: typeof m.createdAt === 'string' ? m.createdAt : new Date(m.createdAt).toISOString(),
     sender: normalizeMessageSender(m.sender as MessageSenderPayload),
   }

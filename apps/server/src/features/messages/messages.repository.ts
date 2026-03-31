@@ -20,6 +20,21 @@ const reactionSelect = {
   createdAt: true,
 } as const
 
+/** Tin cha (reply): chỉ cần snippet + 1 ảnh đại diện. */
+const parentMessageSelect = {
+  id: true,
+  content: true,
+  fileUrl: true,
+  type: true,
+  deletedAt: true,
+  sender: { select: senderSelect },
+  attachments: {
+    orderBy: { sortOrder: 'asc' as const },
+    take: 1,
+    select: { url: true },
+  },
+} as const
+
 const messageListSelect = {
   id: true,
   content: true,
@@ -28,6 +43,7 @@ const messageListSelect = {
   createdAt: true,
   parentId: true,
   sender: { select: senderSelect },
+  parent: { select: parentMessageSelect },
   attachments: {
     orderBy: { sortOrder: 'asc' as const },
     select: attachmentSelect,
