@@ -82,6 +82,8 @@ model User {
   sentFriendships     Friendship[]              @relation("FriendshipRequester")
   recvFriendships     Friendship[]              @relation("FriendshipAddressee")
   notifications       Notification[]
+  pinsCreated         PinnedMessage[] @relation("PinnedByUser")
+  pushSubscriptions   PushSubscription[]
 
   @@index([email])
   @@index([username])
@@ -143,6 +145,7 @@ model Conversation {
 
   participants ConversationParticipant[]
   messages     Message[]
+  pinnedMessages PinnedMessage[]
 
   @@index([type])
   @@index([deletedAt])
@@ -189,6 +192,7 @@ model Message {
   reads         MessageRead[]
   reactions     Reaction[]
   attachments   MessageAttachment[]
+  pinnedMessage PinnedMessage?
 
   @@index([conversationId, createdAt])
   @@index([senderId])
@@ -208,6 +212,22 @@ model MessageAttachment {
 
   @@index([messageId])
   @@map("message_attachments")
+}
+
+// Tin ghim trong hội thoại (giới hạn số lượng ở tầng ứng dụng).
+model PinnedMessage {
+  id             String   @id @default(cuid())
+  conversationId String   @map("conversation_id")
+  messageId      String   @unique @map("message_id")
+  pinnedBy       String   @map("pinned_by")
+  pinnedAt       DateTime @default(now()) @map("pinned_at")
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  message      Message      @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user         User         @relation("PinnedByUser", fields: [pinnedBy], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, pinnedAt(sort: Desc)])
+  @@map("pinned_messages")
 }
 
 model MessageRead {
@@ -275,4 +295,20 @@ model Notification {
   @@index([userId, createdAt])
   @@index([deletedAt])
   @@map("notifications")
+}
+
+// Web Push (VAPID): một bản ghi / endpoint / thiết bị.
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  endpoint  String   @unique
+  p256dh    String   @map("p256dh")
+  auth      String
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
 }

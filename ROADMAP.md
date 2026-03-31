@@ -14,7 +14,7 @@ Frontend: Vite + React + TypeScript (`apps/client`), Tailwind 4, TanStack Query,
 
 **Bước 2 — Database schema (Prisma)** ✅
 
-Schema PostgreSQL (`apps/server/prisma/schema.prisma`): **`User`**, **`Conversation`** (type DM | GROUP), **`ConversationParticipant`**, **`Message`** (reply qua `parentId`), **`MessageRead`**, **`Reaction`**, **`Friendship`**, **`Notification`**, **`OAuthAccount`**, **`RefreshToken`**, **`PasswordResetToken`**. Tên bảng/cột trong DB dùng **`snake_case`** (`@@map` / `@map`). Chưa có bảng `PinnedMessage` (dự kiến Bước 14).
+Schema PostgreSQL (`apps/server/prisma/schema.prisma`): **`User`**, **`Conversation`** (type DM | GROUP), **`ConversationParticipant`**, **`Message`** (reply qua `parentId`), **`MessageRead`**, **`Reaction`**, **`PinnedMessage`**, **`Friendship`**, **`Notification`**, **`OAuthAccount`**, **`RefreshToken`**, **`PasswordResetToken`**. Tên bảng/cột trong DB dùng **`snake_case`** (`@@map` / `@map`).
 
 ---
 
@@ -132,7 +132,7 @@ Code: `apps/server/src/config/upload.config.ts`, `cloudinary.client.ts`, `featur
 - **Schema (Prisma):** bảng **`reactions`** — `messageId`, `userId`, `emoji`, `createdAt`. **`@@unique([messageId, userId])`** — một user một emoji / tin; migration `20260330180000_reaction_one_per_user_per_message`.
 - **API:** **`POST /api/messages/:messageId/reactions`** — body `{ emoji }`; tập **`ALLOWED_REACTION_EMOJIS`** trong **`packages/shared-constants/reaction-emojis.ts`**. Toggle: cùng emoji → xóa; khác → cập nhật (cập nhật `createdAt` để sort tóm tắt theo mới nhất).
 - **Realtime:** **`chat:reaction:updated`** (`SOCKET_EVENTS.CHAT_REACTION_UPDATED`) — **`reactionSummary`** + **`reactions: { userId, emoji }[]`**; client tính **`myReactionEmoji`** theo user đăng nhập.
-- **Client:** **`MessageReactionHoverLayer`** dưới bubble — pill tối (tối đa 3 loại + tổng), nút tròn trắng (Like xám hoặc emoji của mình), menu nhanh / lưới neo sát nút; tin mình căn phải / tin người khác căn trái; **`applyReactionPatch`** (TanStack infinite + Zustand); **`useChatRealtime`** lắng nghe reaction.
+- **Client:** **`MessageReactionHoverLayer`** góc dưới-phải bubble — pill tóm tắt + nút reaction cùng hàng **`h-7 w-7`**, nền trắng / viền nhạt (highlight nhẹ khi mình đã react), like mặc định xám; menu nhanh / lưới mở rộng neo nút; hàng action (Trả lời…) flex ngang cạnh bubble; **`applyReactionPatch`** (TanStack infinite + Zustand); **`useChatRealtime`** lắng nghe reaction.
 
 Code: server `messageReactions.routes.ts`, `messageReactions.controller.ts`, `messages.service` (`setReaction`), `messages.repository`, `chatMessageBroadcast` (`emitReactionUpdated`); client `MessageReactions.tsx`, `reactions/applyReactionPatch.ts`, `useChatRealtime`, `messages.api` (`postMessageReaction`).
 
@@ -142,19 +142,26 @@ Code: server `messageReactions.routes.ts`, `messageReactions.controller.ts`, `me
 
 - **Backend:** `Message.parentId`; **`POST /api/rooms/:id/messages`** + **`chat:send`** với **`parentMessageId`**; mỗi tin trong list trả về **`parentPreview`** (snippet, ảnh đại diện, sender, `isDeleted`) khi có reply — join **`parent`** trong `messageListSelect`.
 - **Client:** Nút **Trả lời** (hover trên bubble), quote phía trên nội dung, preview trong **ChatComposer**, gửi kèm **`parentMessageId`**; click quote → cuộn mượt tới tin cha; nếu tin cha chưa trong cache → **`fetchNextPage`** lặp (overlay + spinner) tới khi tìm thấy hoặc hết trang; fallback **`resolveParentPreview`** từ danh sách đã merge khi thiếu embed.
+- **UX bổ sung:** focus ô nhập khi chọn hội thoại / Trả lời / sau khi gửi; **`ResizeObserver`** bám đáy khi ảnh tải xong; chip giữa màn hình khi có tin mới chỉ ảnh: **“{tên} đã gửi N ảnh”** + cuộn xuống khi bấm.
 - **Chưa làm (tùy chọn):** **`GET /api/messages/:messageId/thread`** và panel thread kiểu Slack — không cần cho luồng quote inline.
 
 ---
 
 **Bước 14 — Pin message & Full-text search**
 
-Pin: có thể thêm bảng `PinnedMessage` (`conversationId`, `messageId`, `pinnedBy`). Search: `pg_trgm` / full-text trên `content`, scope theo `conversationId`.
+- **Pin** ✅ — **`PinnedMessage`** (`messageId` unique, `conversationId`, `pinnedBy`, `pinnedAt`); migration `20260331034629_add_pinned_messages`; **`MAX_PINS_PER_CONVERSATION = 10`** (`@chat-app/shared-constants/pin-defaults.ts`). **REST:** `GET/POST /api/rooms/:id/pins`, `DELETE /api/rooms/:id/pins/:messageId` — mọi participant ghim/gỡ; thứ tự list **`pinnedAt` desc**; preview snippet / **Ảnh**; realtime **`room:pins:updated`**. **Client:** thanh ghim **sticky** đầu thread, nút **Ghim / Bỏ ghim** (hover cạnh Trả lời), panel phải danh sách + cuộn tới tin; **`useChatRealtime`** invalidate **`roomPins`**.
+- **Search** ✅ — **`Message.content`**, substring **không phân biệt dấu** (PostgreSQL **`unaccent`** + **`position(unaccent(lower(...)))`**), chỉ tin **`content` không rỗng**. Migration `20260331120000_message_search_unaccent` bật extension **`unaccent`**, **`pg_trgm`** (index trên biểu thức `unaccent` bị bỏ do Postgres yêu cầu IMMUTABLE). **REST:** **`GET /api/search/messages?q=&cursor=&limit=`** (toàn bộ room user tham gia); **`GET /api/rooms/:id/messages/search?...`** (một room, kiểm tra participant). **`SEARCH_MESSAGES`** trong **`@chat-app/shared-constants/search-defaults.ts`** (độ dài tối thiểu 2, limit mặc định 15 / tối đa 20). **Rate limit:** `express-rate-limit` 40 req/phút cho cả hai nhóm route search. **Client:** **`ChatRoomList`** — ô **Tìm kiếm**, nút **Đóng**, tab **Tất cả / Liên hệ / Tin nhắn / File**, dropdown kết quả dưới tab; **`ChatThreadRoomSearchPanel`** — icon kính lúp trên header (trước panel phải), panel **Tìm kiếm trong trò chuyện** (ô tìm, lọc Người gửi/Ngày gửi placeholder, empty state / danh sách inline); highlight **`highlightSearchSnippet`**; click → **`navigate(..., { state: { focusMessageId } })`** + **`scrollToMessageInThread`** (load trang như reply/pin). Code: `messageSearch.repository.ts`, `messages.service` (`searchMessagesGlobal` / `searchMessagesInRoom`), `search.routes.ts`, `messageSearch.api.ts`, `useMessageSearch.ts`, `MessageSearchResultsDropdown.tsx`.
 
 ---
 
-**Bước 15 — Push notifications**
+**Bước 15 — Push notifications** ✅
 
-BullMQ + Redis làm queue. Khi có message mới, enqueue job `notify:message`. Worker xử lý: lấy danh sách member offline (không còn kết nối — có thể kiểm tra key **`presence:user:{userId}`** = 0 / không tồn tại, cùng mô hình Bước 8), gửi Web Push qua `web-push` library hoặc FCM payload. Frontend đăng ký service worker, lưu `PushSubscription` vào server. User nhận notification dù đang đóng tab.
+- **Queue:** BullMQ queue **`notify-message`**, job **`notify:message`** (`apps/server/src/features/push/notifyMessage.queue.ts`). **`messages.service.createMessage`** (REST + socket) enqueue sau khi tạo tin — thiếu **`VAPID_*`** trong env → không gửi job.
+- **Worker:** `npm run worker` trong `apps/server` (`src/worker.ts`); dev gốc repo: **`npm run dev`** chạy kèm **`dev:worker`**. Worker: mỗi recipient (trừ người gửi), nếu **`presence:user:{userId}`** không online → gửi Web Push (`web-push`) tới mọi **`PushSubscription`** của user; 404/410 → xóa subscription.
+- **DB:** bảng **`push_subscriptions`** (`endpoint` unique, `p256dh`, `auth`); migration **`20260331180000_push_subscriptions`**.
+- **API:** `GET /api/push/vapid-public-key` (public); `POST /api/push/subscribe` / **`/unsubscribe`** (auth).
+- **Env:** `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (+ `CLIENT_URL` cho deep link). Sinh key: `npx web-push generate-vapid-keys` (trong `apps/server`).
+- **Client:** `public/sw.js` — push + `notificationclick` mở `/chat/:conversationId`. **`ensurePushSubscriptionRegistered`** (VAPID + `POST /subscribe`). **`PushNotificationBanner`** — sau đăng nhập: nếu `Notification.permission === 'granted'` → đăng ký im lặng; nếu `default` → banner (Để sau = ẩn phiên tab). **`useDocumentTitle`** + **`titleBar.store`** — `(n) Chat App`, flash **`● Người gửi: …`** khi tab ẩn + `chat:new`, **`navigator.setAppBadge`** nếu hỗ trợ.
 
 ---
 

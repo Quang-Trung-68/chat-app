@@ -245,7 +245,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="relative shrink-0 border-t border-border bg-white px-3 py-2 dark:bg-background">
+      <div className="relative shrink-0 border-t border-border/60 bg-white px-3 py-2">
         {replyingTo ? (
           <div className="mb-2 flex items-start gap-2 rounded-lg border border-border bg-muted/40 px-2 py-1.5 text-xs">
             <div className="min-w-0 flex-1 border-l-2 border-primary pl-2">
@@ -311,48 +311,48 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
           </div>
         ) : null}
 
-        <div className="mb-2 flex flex-wrap gap-0.5">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                disabled={sending}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <Image className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Ảnh (giới hạn theo server)</TooltipContent>
-          </Tooltip>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp,image/gif"
-            multiple
-            className="hidden"
-            onChange={(e) => void onPickFiles(e)}
-          />
-          {[Smile, Paperclip].map((Icon, i) => (
-            <Tooltip key={i}>
+        <div className="flex items-end gap-1.5">
+          <div className="flex shrink-0 items-center gap-0.5 pb-0.5">
+            <Tooltip>
               <TooltipTrigger asChild>
-                <Button type="button" variant="ghost" size="icon" disabled className="h-8 w-8">
-                  <Icon className="h-4 w-4" />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                  disabled={sending}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Image className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Sắp có</TooltipContent>
+              <TooltipContent>Ảnh (giới hạn theo server)</TooltipContent>
             </Tooltip>
-          ))}
-        </div>
-        <div className="flex items-end gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              multiple
+              className="hidden"
+              onChange={(e) => void onPickFiles(e)}
+            />
+            {[Smile, Paperclip].map((Icon, i) => (
+              <Tooltip key={i}>
+                <TooltipTrigger asChild>
+                  <Button type="button" variant="ghost" size="icon" disabled className="h-8 w-8">
+                    <Icon className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Sắp có</TooltipContent>
+              </Tooltip>
+            ))}
+          </div>
           <Input
             ref={inputRef}
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder={`Nhập @, tin nhắn tới ${roomTitle}`}
-            className="min-h-10 flex-1 border-border bg-muted/30"
+            className="min-h-10 flex-1 rounded-full border-border/80 bg-[#f4f5f7] px-4 shadow-none"
             disabled={sending}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
@@ -361,29 +361,36 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
               }
             }}
           />
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                variant="default"
-                size="sm"
-                className={cn('shrink-0', sending && 'opacity-70')}
-                disabled={sending || (!text.trim() && pending.length === 0)}
-                onClick={() => void send()}
-              >
-                Gửi
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Gửi tin nhắn (Enter)</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button type="button" variant="ghost" size="icon" disabled className="shrink-0">
-                <ThumbsUp className="h-5 w-5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Sắp có</TooltipContent>
-          </Tooltip>
+          <div className="flex shrink-0 items-center gap-1 pb-0.5">
+            {text.trim() || pending.length > 0 ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className={cn(
+                      'h-9 shrink-0 rounded-full bg-[#0068ff] px-4 text-white hover:bg-[#0056d6]',
+                      sending && 'opacity-70'
+                    )}
+                    disabled={sending || (!text.trim() && pending.length === 0)}
+                    onClick={() => void send()}
+                  >
+                    Gửi
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Gửi tin nhắn (Enter)</TooltipContent>
+              </Tooltip>
+            ) : (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button type="button" variant="ghost" size="icon" disabled className="h-9 w-9 shrink-0">
+                    <ThumbsUp className="h-5 w-5 text-muted-foreground" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Sắp có</TooltipContent>
+              </Tooltip>
+            )}
+          </div>
         </div>
       </div>
     </TooltipProvider>

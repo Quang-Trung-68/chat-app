@@ -138,6 +138,14 @@ apps/client/
 
 ---
 
+## UI components (shadcn vs. hand-rolled Tailwind)
+
+* Prefer **shadcn/ui** primitives: install with the CLI from the client app, e.g. `npx shadcn@latest add <component>` (respect the repo’s `components.json` and Tailwind setup under `apps/client`).
+* **Do not** hand-write a component that shadcn already provides (e.g. `Button`, `DropdownMenu`, `Dialog`, `Sheet`, `Popover`, `Select`); run `add` first, then compose and style with Tailwind.
+* Only when shadcn does **not** cover the need, implement with Tailwind (and optionally Radix primitives consistent with existing shadcn patterns).
+
+---
+
 ## Feature Template
 
 ```text

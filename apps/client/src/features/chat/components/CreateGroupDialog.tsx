@@ -18,7 +18,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { UserPlus } from 'lucide-react'
+import { Users } from 'lucide-react'
 
 export function CreateGroupDialog() {
   const [open, setOpen] = useState(false)
@@ -63,10 +63,10 @@ export function CreateGroupDialog() {
           type="button"
           variant="ghost"
           size="icon"
-          className="shrink-0 text-muted-foreground hover:text-foreground"
+          className="h-9 w-9 shrink-0 text-muted-foreground hover:bg-[#e5f0ff] hover:text-foreground"
           aria-label="Tạo nhóm"
         >
-          <UserPlus className="h-5 w-5" />
+          <Users className="h-5 w-5" />
         </Button>
       </DialogTrigger>
       <DialogContent className="max-h-[85vh] overflow-hidden sm:max-w-md">

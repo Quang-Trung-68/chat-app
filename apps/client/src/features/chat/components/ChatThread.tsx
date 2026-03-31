@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import type { InfiniteData } from '@tanstack/react-query'
 import { useQueryClient } from '@tanstack/react-query'
 import { usePendingImageUploadsStore } from '@/features/messages/store/pendingImageUploads.store'
-import { ChevronDown, Loader2, PanelRight, Search, UserPlus, Video } from 'lucide-react'
+import { MAX_PINS_PER_CONVERSATION } from '@chat-app/shared-constants'
+import { ChevronDown, Loader2, PanelRight, Phone, Pin, Search, Video } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -24,11 +26,13 @@ import { ChatComposer, type ChatComposerHandle } from './ChatComposer'
 import { ImagePreviewLightbox } from './ImagePreviewLightbox'
 import { MessageImageGrid } from './MessageImageGrid'
 import { MessageQuote } from './MessageQuote'
+import { MessageBubbleActions } from './MessageBubbleActions'
 import { MessageReactionHoverLayer } from './MessageReactions'
 import { useRealtimeMessagesStore } from '@/features/messages/store/realtimeMessages.store'
 import { cn } from '@/lib/utils'
 import { EMPTY_STRING_ARRAY } from '@/lib/zustandEmpty'
 import { displayNameForMessageSender, userDisplayName } from '@/lib/userDisplay'
+import { useRoomPinMutations, useRoomPinsQuery } from '@/features/rooms/queries/useRoomPins'
 
 type ChatThreadProps = {
   conversationId: string
@@ -36,6 +40,11 @@ type ChatThreadProps = {
   currentUserId: string | undefined
   onToggleRightPanel: () => void
   rightPanelOpen: boolean
+  /** Bật/tắt khối tìm kiếm trong panel phải. */
+  roomSearchOpen: boolean
+  onToggleRoomSearch: () => void
+  /** Đăng ký hàm cuộn tới tin (panel phải / nơi khác). */
+  onScrollToMessageReady?: (scrollTo: (messageId: string) => Promise<void>) => void
 }
 
 const NEAR_BOTTOM_PX = 100
@@ -73,7 +82,12 @@ export function ChatThread({
   currentUserId,
   onToggleRightPanel,
   rightPanelOpen,
+  roomSearchOpen,
+  onToggleRoomSearch,
+  onScrollToMessageReady,
 }: ChatThreadProps) {
+  const navigate = useNavigate()
+  const location = useLocation()
   const { socket, connected } = useSocket()
   useRoomReadSync(socket, connected, conversationId)
 
@@ -101,11 +115,6 @@ export function ChatThread({
     urls: string[]
     startIndex: number
   } | null>(null)
-  /** Tăng khi chuột rời hết khối tin (bubble + reaction float) — đóng menu vuông reaction. */
-  const [reactionShellLeaveByMessageId, setReactionShellLeaveByMessageId] = useState<
-    Record<string, number>
-  >({})
-
   const title = room ? getRoomTitle(room, currentUserId) : 'Đang tải…'
   const mentionLine = room ? getDmMentionLine(room, currentUserId) : null
   const groups = useMemo(() => groupMessagesByDay(merged), [merged])
@@ -121,6 +130,11 @@ export function ChatThread({
   const [replyingTo, setReplyingTo] = useState<MessageItemDto | null>(null)
   const [isLoadingParentScroll, setIsLoadingParentScroll] = useState(false)
   const [parentNavError, setParentNavError] = useState<string | null>(null)
+
+  const { data: pinsData = [] } = useRoomPinsQuery(conversationId)
+  const { pin: pinMut, unpin: unpinMut } = useRoomPinMutations(conversationId)
+  const pinnedIds = useMemo(() => new Set(pinsData.map((p) => p.messageId)), [pinsData])
+  const pinSlotsLeft = pinsData.length < MAX_PINS_PER_CONVERSATION
 
   const messageInRoomCache = useCallback(
     (messageId: string) => {
@@ -191,6 +205,39 @@ export function ChatThread({
   useEffect(() => {
     setReplyingTo(null)
   }, [conversationId])
+
+  useEffect(() => {
+    onScrollToMessageReady?.(scrollToMessageInThread)
+  }, [onScrollToMessageReady, scrollToMessageInThread])
+
+  const focusMessageId = (location.state as { focusMessageId?: string } | null)?.focusMessageId
+  const focusHandledKeyRef = useRef<string | null>(null)
+  useEffect(() => {
+    focusHandledKeyRef.current = null
+  }, [conversationId])
+
+  useEffect(() => {
+    if (!focusMessageId) focusHandledKeyRef.current = null
+  }, [focusMessageId])
+
+  useEffect(() => {
+    if (!focusMessageId) return
+    const key = `${conversationId}:${focusMessageId}`
+    if (focusHandledKeyRef.current === key) return
+    focusHandledKeyRef.current = key
+    let cancelled = false
+    void scrollToMessageInThread(focusMessageId).finally(() => {
+      if (!cancelled) {
+        navigate(
+          { pathname: location.pathname, search: location.search },
+          { replace: true, state: {} }
+        )
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [focusMessageId, conversationId, scrollToMessageInThread, navigate, location.pathname, location.search])
 
   /** Focus ô nhập khi chọn hội thoại khác. */
   useEffect(() => {
@@ -402,16 +449,16 @@ export function ChatThread({
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-white motion-reduce:transition-none">
-      <header className="flex shrink-0 flex-col border-b border-border px-3 py-2">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-3">
-            <Avatar className="h-10 w-10 shrink-0">
-              <AvatarFallback className="bg-primary/15 text-sm font-medium text-primary">
+      <header className="relative z-20 flex shrink-0 flex-col border-b border-border/60 py-2">
+        <div className="flex items-center justify-between gap-2 px-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <Avatar className="h-9 w-9 shrink-0">
+              <AvatarFallback className="bg-[#0068ff]/15 text-sm font-medium text-[#0068ff]">
                 {title.slice(0, 1).toUpperCase()}
               </AvatarFallback>
             </Avatar>
             <div className="min-w-0">
-              <h2 className="truncate font-semibold text-foreground">{title}</h2>
+              <h2 className="truncate text-sm font-semibold text-foreground">{title}</h2>
               {mentionLine ? (
                 <p className="truncate text-xs text-muted-foreground">{mentionLine}</p>
               ) : room ? (
@@ -424,24 +471,43 @@ export function ChatThread({
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-0.5">
-            <Button type="button" variant="ghost" size="icon" disabled title="Sắp có">
-              <UserPlus className="h-5 w-5" />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              disabled
+              title="Cuộc gọi (sắp có)"
+            >
+              <Phone className="h-4 w-4" />
             </Button>
-            <Button type="button" variant="ghost" size="icon" disabled title="Sắp có">
-              <Video className="h-5 w-5" />
-            </Button>
-            <Button type="button" variant="ghost" size="icon" disabled title="Sắp có">
-              <Search className="h-5 w-5" />
+            <Button type="button" variant="ghost" size="icon" className="h-8 w-8" disabled title="Gọi video (sắp có)">
+              <Video className="h-4 w-4" />
             </Button>
             <Button
               type="button"
               variant="ghost"
               size="icon"
+              className={cn(
+                'h-8 w-8',
+                roomSearchOpen && 'bg-blue-50 text-[#0068ff] hover:bg-blue-100 hover:text-[#0068ff]'
+              )}
+              onClick={onToggleRoomSearch}
+              title="Tìm trong hội thoại"
+              aria-expanded={roomSearchOpen}
+              aria-label="Tìm trong hội thoại"
+            >
+              <Search className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className={cn('h-8 w-8', rightPanelOpen && 'bg-blue-50 text-[#0068ff] hover:bg-blue-100 hover:text-[#0068ff]')}
               onClick={onToggleRightPanel}
               title="Thông tin hội thoại"
-              className={cn(rightPanelOpen && 'bg-accent')}
             >
-              <PanelRight className="h-5 w-5" />
+              <PanelRight className="h-4 w-4" />
             </Button>
           </div>
         </div>
@@ -450,7 +516,7 @@ export function ChatThread({
       <div className="relative min-h-0 flex-1">
         <div
           ref={scrollRef}
-          className="relative h-full min-h-0 scroll-auto overflow-y-auto bg-stone-100/90 px-4 py-3 dark:bg-stone-900/20"
+          className="relative h-full min-h-0 scroll-auto overflow-y-auto bg-[#ebf0f5] px-4 py-3"
         >
           {isLoadingParentScroll ? (
             <div
@@ -459,6 +525,25 @@ export function ChatThread({
               aria-label="Đang tải tin nhắn cũ"
             >
               <Loader2 className="h-9 w-9 animate-spin text-muted-foreground" aria-hidden />
+            </div>
+          ) : null}
+          {initialRevealDone && pinsData.length > 0 ? (
+            <div className="sticky top-0 z-5 -mx-4 mb-2 bg-[#606060] px-3 py-1.5 shadow-md backdrop-blur-sm">
+              <div className="flex items-center gap-2 overflow-x-auto pb-0.5">
+                <Pin className="h-4 w-4 shrink-0 text-amber-500" aria-hidden />
+                <span className="sr-only">Tin đã ghim</span>
+                {pinsData.map((p) => (
+                  <button
+                    key={p.messageId}
+                    type="button"
+                    onClick={() => void scrollToMessageInThread(p.messageId)}
+                    className="max-w-[min(100%,14rem)] shrink-0 truncate rounded-full border-0 bg-zinc-700 px-2.5 py-0.5 text-left text-xs text-white transition-colors hover:bg-zinc-600"
+                    title={p.preview}
+                  >
+                    {p.preview}
+                  </button>
+                ))}
+              </div>
             </div>
           ) : null}
           {!infinite.isLoading && merged.length === 0 && initialRevealDone ? (
@@ -489,7 +574,7 @@ export function ChatThread({
               {groups.map((g) => (
                 <div key={g.dayKey} className="mb-4">
                   <div className="mb-3 flex justify-center">
-                    <span className="rounded-full bg-white/95 px-3 py-1 text-xs text-muted-foreground shadow-sm">
+                    <span className="rounded-full bg-white/80 px-3 py-0.5 text-[10px] text-muted-foreground shadow-sm">
                       {formatDaySeparator(g.items[0].createdAt)}
                     </span>
                   </div>
@@ -517,22 +602,31 @@ export function ChatThread({
                             <div className="w-8 shrink-0" />
                           )}
                           <div
-                            className="group/msg relative inline-block max-w-[min(100%,28rem)] pb-4"
-                            onMouseLeave={(e) => {
-                              const next = e.relatedTarget as Node | null
-                              if (next && e.currentTarget.contains(next)) return
-                              setReactionShellLeaveByMessageId((prev) => ({
-                                ...prev,
-                                [m.id]: (prev[m.id] ?? 0) + 1,
-                              }))
-                            }}
+                            className={cn(
+                              'group/msg flex w-max max-w-[min(100%,28rem)] items-end gap-1.5'
+                            )}
                           >
+                            {mine ? (
+                              <>
+                                <MessageBubbleActions
+                                  conversationId={conversationId}
+                                  message={m}
+                                  mine={mine}
+                                  isPinned={pinnedIds.has(m.id)}
+                                  pinSlotsLeft={pinSlotsLeft}
+                                  pinPending={pinMut.isPending}
+                                  unpinPending={unpinMut.isPending}
+                                  onReply={() => setReplyingTo(m)}
+                                  onPin={() => pinMut.mutate(m.id)}
+                                  onUnpin={() => unpinMut.mutate(m.id)}
+                                />
+                                <div className="relative w-fit max-w-full min-w-0 pb-3">
                             <div
                               className={cn(
-                                'rounded-2xl px-3 py-2 text-sm shadow-sm',
+                                'rounded-2xl px-3 py-2 text-sm',
                                 mine
-                                  ? 'bg-primary text-primary-foreground'
-                                  : 'border border-border bg-white text-foreground'
+                                  ? 'rounded-br-sm bg-[#0068ff] text-white shadow-sm'
+                                  : 'rounded-bl-sm border-0 bg-white text-foreground shadow-sm'
                               )}
                             >
                               {parentPreview ? (
@@ -549,7 +643,7 @@ export function ChatThread({
                                 </div>
                               ) : null}
                               {!mine ? (
-                                <p className="mb-1 text-xs text-muted-foreground">{senderLabel}</p>
+                                <p className="mb-1 text-xs font-medium text-[#0068ff]">{senderLabel}</p>
                               ) : null}
                               {m.content ? (
                                 <p className="whitespace-pre-wrap wrap-break-word">{m.content}</p>
@@ -592,31 +686,107 @@ export function ChatThread({
                               })()}
                               <div
                                 className={cn(
-                                  'mt-1 flex items-center justify-between gap-2 text-[10px]',
-                                  mine ? 'text-primary-foreground/80' : 'text-muted-foreground'
+                                  'mt-1 text-[10px]',
+                                  mine ? 'text-white/70' : 'text-muted-foreground/80'
                                 )}
                               >
                                 <span>{formatMessageTime(m.createdAt)}</span>
-                                <button
-                                  type="button"
-                                  className={cn(
-                                    'shrink-0 rounded px-1.5 py-0.5 opacity-0 transition-opacity duration-150 group-hover/msg:opacity-100',
-                                    mine
-                                      ? 'text-primary-foreground/90 hover:bg-white/15 hover:underline'
-                                      : 'text-primary hover:bg-primary/10 hover:underline'
-                                  )}
-                                  onClick={() => setReplyingTo(m)}
-                                >
-                                  Trả lời
-                                </button>
                               </div>
                             </div>
-                            <MessageReactionHoverLayer
-                              message={m}
-                              conversationId={conversationId}
-                              mine={mine}
-                              shellLeaveSignal={reactionShellLeaveByMessageId[m.id] ?? 0}
-                            />
+                            <MessageReactionHoverLayer message={m} conversationId={conversationId} mine={mine} />
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <div className="relative w-fit max-w-full min-w-0 pb-3">
+                            <div
+                              className={cn(
+                                'rounded-2xl px-3 py-2 text-sm',
+                                mine
+                                  ? 'rounded-br-sm bg-[#0068ff] text-white shadow-sm'
+                                  : 'rounded-bl-sm border-0 bg-white text-foreground shadow-sm'
+                              )}
+                            >
+                              {parentPreview ? (
+                                <div className={cn('mb-2', !mine && '-mx-0.5')}>
+                                  <MessageQuote
+                                    preview={parentPreview}
+                                    mine={mine}
+                                    onNavigate={
+                                      parentPreview.isDeleted
+                                        ? undefined
+                                        : () => void scrollToMessageInThread(parentPreview.id)
+                                    }
+                                  />
+                                </div>
+                              ) : null}
+                              {!mine ? (
+                                <p className="mb-1 text-xs font-medium text-[#0068ff]">{senderLabel}</p>
+                              ) : null}
+                              {m.content ? (
+                                <p className="whitespace-pre-wrap wrap-break-word">{m.content}</p>
+                              ) : null}
+                              {(() => {
+                                const pending = pendingByMessageId[m.id]
+                                const serverUrls = sortedAttachmentUrls(m)
+                                const legacySingle =
+                                  serverUrls.length === 0 &&
+                                    m.fileUrl &&
+                                    m.fileType === 'IMAGE'
+                                    ? [m.fileUrl]
+                                    : []
+                                const displayUrls =
+                                  serverUrls.length > 0
+                                    ? serverUrls
+                                    : legacySingle.length > 0
+                                      ? legacySingle
+                                      : (pending?.previewUrls ?? [])
+                                const imageLoading =
+                                  Boolean(pending?.previewUrls?.length) &&
+                                  serverUrls.length === 0 &&
+                                  legacySingle.length === 0
+                                if (displayUrls.length === 0 && !imageLoading) return null
+                                return (
+                                  <div className={cn(m.content ? 'mt-2' : '')}>
+                                    <MessageImageGrid
+                                      urls={displayUrls}
+                                      totalCount={displayUrls.length}
+                                      loading={imageLoading}
+                                      onPhotoClick={(idx) =>
+                                        setLightbox({
+                                          urls: displayUrls,
+                                          startIndex: Math.min(idx, displayUrls.length - 1),
+                                        })
+                                      }
+                                    />
+                                  </div>
+                                )
+                              })()}
+                              <div
+                                className={cn(
+                                  'mt-1 text-[10px]',
+                                  mine ? 'text-white/70' : 'text-muted-foreground/80'
+                                )}
+                              >
+                                <span>{formatMessageTime(m.createdAt)}</span>
+                              </div>
+                            </div>
+                            <MessageReactionHoverLayer message={m} conversationId={conversationId} mine={mine} />
+                                </div>
+                                <MessageBubbleActions
+                                  conversationId={conversationId}
+                                  message={m}
+                                  mine={mine}
+                                  isPinned={pinnedIds.has(m.id)}
+                                  pinSlotsLeft={pinSlotsLeft}
+                                  pinPending={pinMut.isPending}
+                                  unpinPending={unpinMut.isPending}
+                                  onReply={() => setReplyingTo(m)}
+                                  onPin={() => pinMut.mutate(m.id)}
+                                  onUnpin={() => unpinMut.mutate(m.id)}
+                                />
+                              </>
+                            )}
                           </div>
                         </li>
                       )
@@ -630,7 +800,7 @@ export function ChatThread({
           {skelPhase !== 'hidden' ? (
             <div
               className={cn(
-                'pointer-events-none absolute inset-0 z-10 flex flex-col bg-stone-100/90 px-4 py-3 backdrop-blur-[2px] transition-opacity duration-300 ease-out dark:bg-stone-900/35',
+                'pointer-events-none absolute inset-0 z-10 flex flex-col bg-[#ebf0f5] px-4 py-3 backdrop-blur-[2px] transition-opacity duration-300 ease-out',
                 skelPhase === 'fading' ? 'opacity-0' : 'opacity-100'
               )}
               aria-hidden
@@ -663,7 +833,7 @@ export function ChatThread({
             className="pointer-events-none absolute bottom-1 left-2 z-20 max-w-[min(calc(100%-1rem),17rem)] motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:duration-200"
             aria-live="polite"
           >
-            <span className="inline-block max-w-full truncate rounded border border-border bg-white/95 px-1.5 py-0.5 text-[11px] leading-snug text-muted-foreground shadow-sm backdrop-blur-sm transition-shadow duration-200">
+            <span className="inline-block max-w-full truncate rounded-full border-0 bg-white px-2 py-0.5 text-[11px] leading-snug text-muted-foreground shadow-sm backdrop-blur-sm transition-shadow duration-200">
               {typingLine}
             </span>
           </div>
@@ -688,7 +858,7 @@ export function ChatThread({
               className="pointer-events-auto flex max-w-[min(100%,24rem)] min-h-[40px] items-center gap-2 rounded-full border border-border bg-white/95 px-4 py-2 text-left text-sm shadow-md backdrop-blur-sm transition-all duration-200 ease-out hover:bg-white hover:shadow-lg active:scale-[0.98]"
             >
               {floatingCenterUi.kind === 'arrow' ? (
-                <ChevronDown className="h-5 w-5 shrink-0 text-primary" aria-hidden />
+                <ChevronDown className="h-5 w-5 shrink-0 text-[#0068ff]" aria-hidden />
               ) : null}
               {floatingCenterUi.kind === 'text' ? (
                 <span className="truncate text-foreground">{floatingCenterUi.text}</span>

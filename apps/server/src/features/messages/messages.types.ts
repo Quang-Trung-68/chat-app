@@ -63,6 +63,32 @@ export interface MessagesPageDto {
   hasMore: boolean
 }
 
+/** Một dòng kết quả tìm kiếm tin nhắn (global hoặc trong room). */
+export interface MessageSearchHitDto {
+  messageId: string
+  conversationId: string
+  /** Nội dung đầy đủ (text). */
+  content: string
+  /** Rút gọn để hiển thị. */
+  snippet: string
+  createdAt: string
+  /** Tiêu đề hội thoại (nhóm / tên người DM). */
+  conversationLabel: string
+  sender: {
+    id: string
+    displayName: string
+    avatarUrl: string | null
+  }
+  /** Tin do chính user gửi — UI có thể prefix "Bạn:". */
+  isSentByViewer: boolean
+}
+
+export interface MessageSearchPageDto {
+  items: MessageSearchHitDto[]
+  nextCursor: string | null
+  hasMore: boolean
+}
+
 export interface CreateMessageBody {
   content?: string
   fileUrl?: string

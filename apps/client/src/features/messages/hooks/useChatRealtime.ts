@@ -10,6 +10,10 @@ import { useAuthStore } from '@/features/auth/store/auth.store'
 import { useRealtimeMessagesStore } from '../store/realtimeMessages.store'
 import { usePendingImageUploadsStore } from '../store/pendingImageUploads.store'
 import { applyReactionPatch } from '../reactions/applyReactionPatch'
+import { useTitleBarStore } from '@/features/app/titleBar.store'
+
+/** Chấm đỏ nhỏ: emoji + text presentation (nhỏ hơn so với emoji đầy). */
+const TITLE_DOT = '\u{1F534}\uFE0E'
 
 type ChatNewPayload = {
   conversationId: string
@@ -56,6 +60,23 @@ export function useChatRealtime(socket: Socket | null, connected: boolean) {
       upsertFromSocket(payload.conversationId, msg)
       if (msg.attachments?.length) clearPendingUploads(msg.id)
       void queryClient.invalidateQueries({ queryKey: roomsKeys.all })
+
+      if (
+        typeof document !== 'undefined' &&
+        document.hidden &&
+        userId &&
+        msg.sender.id !== userId
+      ) {
+        const senderName =
+          msg.sender.displayName?.trim() || msg.sender.username || 'Ai đó'
+        const preview =
+          msg.content?.trim() ||
+          (msg.attachments?.length ? 'Ảnh' : '') ||
+          (msg.fileUrl ? 'Ảnh' : '') ||
+          'Tin nhắn'
+        const short = preview.length > 28 ? `${preview.slice(0, 25)}…` : preview
+        useTitleBarStore.getState().setFlashLine(`${TITLE_DOT} ${senderName}: ${short}`)
+      }
     }
 
     const onUpdated = (payload: ChatNewPayload) => {
@@ -83,15 +104,24 @@ export function useChatRealtime(socket: Socket | null, connected: boolean) {
       })
     }
 
+    const onPinsUpdated = (payload: { conversationId?: string }) => {
+      if (!payload?.conversationId) return
+      void queryClient.invalidateQueries({
+        queryKey: roomsKeys.pins(payload.conversationId),
+      })
+    }
+
     socket.on(SOCKET_EVENTS.CHAT_NEW, onNew)
     socket.on(SOCKET_EVENTS.CHAT_MESSAGE_UPDATED, onUpdated)
     socket.on(SOCKET_EVENTS.CHAT_REACTION_UPDATED, onReactionUpdated)
+    socket.on(SOCKET_EVENTS.ROOM_PINS_UPDATED, onPinsUpdated)
     socket.on(SOCKET_EVENTS.CHAT_ERROR, onError)
 
     return () => {
       socket.off(SOCKET_EVENTS.CHAT_NEW, onNew)
       socket.off(SOCKET_EVENTS.CHAT_MESSAGE_UPDATED, onUpdated)
       socket.off(SOCKET_EVENTS.CHAT_REACTION_UPDATED, onReactionUpdated)
+      socket.off(SOCKET_EVENTS.ROOM_PINS_UPDATED, onPinsUpdated)
       socket.off(SOCKET_EVENTS.CHAT_ERROR, onError)
     }
   }, [socket, connected, upsertFromSocket, clearPendingUploads, queryClient, userId])

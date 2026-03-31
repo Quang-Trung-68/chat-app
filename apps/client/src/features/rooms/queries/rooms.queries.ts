@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/services/api'
+import { useAuthStore } from '@/features/auth/store/auth.store'
 import { roomsKeys } from '../rooms.keys'
 import type { RoomListItem } from '../types/room.types'
 
@@ -23,8 +24,10 @@ function normalizeRoomListItem(room: RoomListItem): RoomListItem {
 }
 
 export function useRoomsQuery() {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   return useQuery({
     queryKey: roomsKeys.all,
+    enabled: isAuthenticated,
     queryFn: async () => {
       const { data } = await api.get<{ success: boolean; data: RoomListItem[] }>('/rooms')
       return data.data.map(normalizeRoomListItem)

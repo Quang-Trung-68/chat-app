@@ -19,6 +19,8 @@ export const SOCKET_EVENTS = {
   RECEIPT_READ: 'receipt:read',
   /** Client → server: join Socket.IO room sau khi có membership mới (tạo nhóm / refetch). */
   CONVERSATION_JOIN: 'conversation:join',
+  /** Server → room: danh sách ghim thay đổi (client invalidate GET pins). */
+  ROOM_PINS_UPDATED: 'room:pins:updated',
 } as const
 
 export type SocketEventKey = keyof typeof SOCKET_EVENTS

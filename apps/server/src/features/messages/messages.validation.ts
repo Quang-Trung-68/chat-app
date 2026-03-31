@@ -1,3 +1,4 @@
+import { SEARCH_MESSAGES } from '@chat-app/shared-constants'
 import type { Request, Response, NextFunction } from 'express'
 import {
   ALLOWED_REACTION_EMOJIS_NORMALIZED,
@@ -12,6 +13,22 @@ const apiFileType = z.enum(['IMAGE', 'VIDEO', 'DOCUMENT', 'AUDIO'])
 export const listMessagesQuerySchema = z.object({
   cursor: z.string().cuid().optional(),
   limit: z.coerce.number().int().min(1).max(50).optional().default(30),
+})
+
+export const searchMessagesQuerySchema = z.object({
+  q: z
+    .string()
+    .trim()
+    .min(SEARCH_MESSAGES.MIN_QUERY_LENGTH, `Tối thiểu ${SEARCH_MESSAGES.MIN_QUERY_LENGTH} ký tự`)
+    .max(SEARCH_MESSAGES.MAX_QUERY_LENGTH),
+  cursor: z.string().min(1).optional(),
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(SEARCH_MESSAGES.MAX_LIMIT)
+    .optional()
+    .default(SEARCH_MESSAGES.DEFAULT_LIMIT),
 })
 
 export const createMessageSchema = z

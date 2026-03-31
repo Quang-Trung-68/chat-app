@@ -27,6 +27,50 @@ export async function createGroup(req: Request, res: Response, next: NextFunctio
   }
 }
 
+export async function listPins(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user!.id
+    const idParsed = z.string().cuid().safeParse(req.params.id)
+    if (!idParsed.success) {
+      return next(new AppError('ID room không hợp lệ', 400, 'VALIDATION_ERROR'))
+    }
+    const data = await roomsService.listPins(userId, idParsed.data)
+    res.json({ success: true, data })
+  } catch (e) {
+    next(e)
+  }
+}
+
+export async function pinMessage(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user!.id
+    const idParsed = z.string().cuid().safeParse(req.params.id)
+    if (!idParsed.success) {
+      return next(new AppError('ID room không hợp lệ', 400, 'VALIDATION_ERROR'))
+    }
+    const body = req.body as { messageId: string }
+    await roomsService.pinMessage(userId, idParsed.data, body.messageId)
+    res.status(201).json({ success: true, data: { ok: true } })
+  } catch (e) {
+    next(e)
+  }
+}
+
+export async function unpinMessage(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user!.id
+    const idParsed = z.string().cuid().safeParse(req.params.id)
+    const msgParsed = z.string().cuid().safeParse(req.params.messageId)
+    if (!idParsed.success || !msgParsed.success) {
+      return next(new AppError('ID không hợp lệ', 400, 'VALIDATION_ERROR'))
+    }
+    await roomsService.unpinMessage(userId, idParsed.data, msgParsed.data)
+    res.json({ success: true, data: { ok: true } })
+  } catch (e) {
+    next(e)
+  }
+}
+
 export async function markRoomRead(req: Request, res: Response, next: NextFunction) {
   try {
     const userId = req.user!.id

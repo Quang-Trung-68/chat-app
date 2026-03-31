@@ -40,6 +40,27 @@ export function formatSidebarTime(iso: string): string {
   return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
+/** Thời gian trong kết quả tìm kiếm tin (relative + ngày). */
+export function formatSearchHitTime(iso: string): string {
+  const d = new Date(iso)
+  const now = new Date()
+  if (Number.isNaN(d.getTime())) return ''
+
+  const diffMs = Math.max(0, now.getTime() - d.getTime())
+  const diffM = Math.floor(diffMs / 60000)
+  const diffD = Math.floor(diffMs / 86400000)
+
+  if (diffM < 1) return 'Vừa xong'
+  if (diffM < 60) return `${diffM} phút trước`
+  if (diffD < 1) return `${Math.floor(diffMs / 3600000)} giờ trước`
+  if (diffD < 7) return `${diffD} ngày`
+
+  if (d.getFullYear() === now.getFullYear()) {
+    return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })
+  }
+  return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
 export function formatDaySeparator(iso: string): string {
   const d = new Date(iso)
   return d.toLocaleDateString('vi-VN', {

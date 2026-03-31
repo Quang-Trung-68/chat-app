@@ -24,6 +24,7 @@ function attachQuietErrorHandler(client: Redis, label: string) {
 /** Tối thiểu API typing/presence (Promise). */
 export type RedisCacheLike = {
   setex(key: string, seconds: number, value: string): Promise<'OK'>
+  get(key: string): Promise<string | null>
   del(...keys: string[]): Promise<number>
   incr(key: string): Promise<number>
   decr(key: string): Promise<number>
@@ -33,6 +34,14 @@ class InMemoryRedisLike implements RedisCacheLike {
   private strings = new Map<string, string>()
   private counters = new Map<string, number>()
   private ttlTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+  async get(key: string): Promise<string | null> {
+    if (this.counters.has(key)) {
+      const n = this.counters.get(key)!
+      return n > 0 ? String(n) : null
+    }
+    return this.strings.get(key) ?? null
+  }
 
   async setex(key: string, seconds: number, value: string): Promise<'OK'> {
     const prev = this.ttlTimers.get(key)

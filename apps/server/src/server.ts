@@ -13,10 +13,12 @@ import { initPassport } from './config/passport'
 import authRoutes from './modules/auth/auth.routes'
 import roomsRoutes from './features/rooms/rooms.routes'
 import messagesRoutes from './features/messages/messages.routes'
+import searchRoutes from './features/search/search.routes'
 import messageAttachmentsRoutes from './features/messages/messageAttachments.routes'
 import messageReactionsRoutes from './features/messages/messageReactions.routes'
 import configRoutes from './features/config/config.routes'
 import usersRoutes from './features/users/users.routes'
+import pushRoutes from './features/push/push.routes'
 import { globalErrorHandler } from './middlewares/globalErrorHandler'
 import { initSocketServer } from './features/sockets/socketServer'
 
@@ -45,10 +47,12 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/auth', authRoutes)
 app.use('/api/rooms', roomsRoutes)
 app.use('/api/rooms', messagesRoutes)
+app.use('/api/search', searchRoutes)
 app.use('/api/messages', messageAttachmentsRoutes)
 app.use('/api/messages', messageReactionsRoutes)
 app.use('/api/config', configRoutes)
 app.use('/api/users', usersRoutes)
+app.use('/api/push', pushRoutes)
 
 // ─── Global error handler (must be LAST middleware) ───────────────────────────
 app.use(globalErrorHandler)

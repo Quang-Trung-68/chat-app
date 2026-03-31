@@ -3,6 +3,8 @@ import { QueryProvider } from './QueryProvider'
 import { ErrorBoundary } from './ErrorBoundary'
 import { AuthBootstrap } from './AuthBootstrap'
 import { SocketBootstrap } from './SocketBootstrap'
+import { DocumentTitleSync } from '@/features/app/DocumentTitleSync'
+import { PushNotificationBanner } from '@/features/push/components/PushNotificationBanner'
 import { AppRoutes } from '@/routes'
 
 export function App() {
@@ -10,7 +12,9 @@ export function App() {
     <QueryProvider>
       <BrowserRouter>
         <AuthBootstrap />
+        <DocumentTitleSync />
         <SocketBootstrap />
+        <PushNotificationBanner />
         <ErrorBoundary>
           <AppRoutes />
         </ErrorBoundary>

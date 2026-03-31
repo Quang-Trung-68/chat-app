@@ -37,3 +37,12 @@ export interface CreatedRoomDto {
   createdAt: Date
   participants: Array<RoomParticipantDto & { role: string }>
 }
+
+export interface PinnedMessageItemDto {
+  messageId: string
+  pinnedAt: Date
+  pinnedBy: RoomParticipantDto
+  sender: RoomParticipantDto
+  /** Snippet hiển thị (chữ rút gọn hoặc "Ảnh"). */
+  preview: string
+}

@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { authenticate } from '@/middlewares/authenticate'
 import * as controller from './rooms.controller'
-import { validate, createGroupSchema } from './rooms.validation'
+import { validate, createGroupSchema, pinMessageSchema } from './rooms.validation'
 
 const router = Router()
 
@@ -9,6 +9,9 @@ router.use(authenticate)
 
 router.get('/', controller.listRooms)
 router.post('/', validate(createGroupSchema), controller.createGroup)
+router.get('/:id/pins', controller.listPins)
+router.post('/:id/pins', validate(pinMessageSchema), controller.pinMessage)
+router.delete('/:id/pins/:messageId', controller.unpinMessage)
 router.patch('/:id/read', controller.markRoomRead)
 
 export default router

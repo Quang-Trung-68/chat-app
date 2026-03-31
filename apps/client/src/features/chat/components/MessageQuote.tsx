@@ -22,8 +22,8 @@ export function MessageQuote({ preview, mine, onNavigate, className }: MessageQu
       className={cn(
         'flex min-w-0 gap-2 rounded-md border-l-[3px] px-2 py-1.5 text-left',
         mine
-          ? 'border-white/50 bg-black/10 dark:bg-black/20'
-          : 'border-primary/50 bg-muted/50 dark:bg-muted/30'
+          ? 'border-white/40 bg-white/15'
+          : 'border-[#0068ff]/40 bg-[#f0f4f8]'
       )}
     >
       {showThumb ? (
@@ -40,7 +40,7 @@ export function MessageQuote({ preview, mine, onNavigate, className }: MessageQu
         <p
           className={cn(
             'truncate font-medium leading-tight',
-            mine ? 'text-primary-foreground/95' : 'text-foreground'
+            mine ? 'text-white font-semibold' : 'text-foreground'
           )}
         >
           {preview.isDeleted ? 'Tin nhắn đã bị xóa' : senderLabel(preview)}
@@ -49,7 +49,7 @@ export function MessageQuote({ preview, mine, onNavigate, className }: MessageQu
           <p
             className={cn(
               'mt-0.5 line-clamp-2 wrap-break-word leading-snug',
-              mine ? 'text-primary-foreground/80' : 'text-muted-foreground'
+              mine ? 'text-white/85' : 'text-muted-foreground'
             )}
           >
             {preview.contentSnippet ??

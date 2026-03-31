@@ -7,6 +7,10 @@ export const createGroupSchema = z.object({
   participantIds: z.array(z.string().cuid()).min(1),
 })
 
+export const pinMessageSchema = z.object({
+  messageId: z.string().cuid(),
+})
+
 export const validate =
   (schema: ZodSchema) => (req: Request, _res: Response, next: NextFunction) => {
     const result = schema.safeParse(req.body)

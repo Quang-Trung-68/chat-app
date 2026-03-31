@@ -61,4 +61,9 @@ export const env = {
   CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME || '',
   CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY || '',
   CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET || '',
+  /** Web Push (VAPID). Thiếu → không enqueue job push / worker bỏ qua gửi. */
+  VAPID_PUBLIC_KEY: process.env.VAPID_PUBLIC_KEY || '',
+  VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY || '',
+  /** `mailto:you@example.com` hoặc URL trang chủ (chuẩn web-push). */
+  VAPID_SUBJECT: process.env.VAPID_SUBJECT || 'mailto:noreply@localhost',
 }

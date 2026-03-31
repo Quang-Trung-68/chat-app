@@ -2,11 +2,15 @@ import { MessageType as MT } from '@prisma/client'
 import { uploadImageBufferToCloudinary, ensureCloudinaryConfigured } from '@/config/cloudinary.client'
 import { getUploadConfig } from '@/config/upload.config'
 import { AppError } from '@/shared/errors/AppError'
+import { enqueueNotifyMessageJob } from '@/features/push/notifyMessage.queue'
 import { messagesRepository } from './messages.repository'
+import { messageSearchRepository, type MessageSearchRow } from './messageSearch.repository'
 import {
   messageTypeToApiFileType,
   type CreateMessageBody,
   type MessageItemDto,
+  type MessageSearchHitDto,
+  type MessageSearchPageDto,
   type MessagesPageDto,
   type ParentMessagePreviewDto,
   type ReactionSummaryDto,
@@ -61,6 +65,41 @@ function snippetText(s: string, max: number): string {
   const t = s.trim()
   if (t.length <= max) return t
   return `${t.slice(0, Math.max(0, max - 1))}…`
+}
+
+function encodeSearchCursor(createdAt: Date, id: string): string {
+  return Buffer.from(JSON.stringify({ t: createdAt.toISOString(), id }), 'utf8').toString('base64url')
+}
+
+function decodeSearchCursor(cursor: string): { createdAt: Date; id: string } {
+  try {
+    const o = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as { t: string; id: string }
+    if (!o.t || !o.id) throw new Error('bad')
+    return { createdAt: new Date(o.t), id: o.id }
+  } catch {
+    throw new AppError('Cursor không hợp lệ', 400, 'INVALID_CURSOR')
+  }
+}
+
+function mapSearchRow(row: MessageSearchRow, viewerId: string): MessageSearchHitDto {
+  const conversationLabel =
+    row.conv_type === 'GROUP'
+      ? row.group_name?.trim() || 'Nhóm'
+      : row.dm_peer_display_name?.trim() || 'Hội thoại'
+  return {
+    messageId: row.message_id,
+    conversationId: row.conversation_id,
+    content: row.content,
+    snippet: snippetText(row.content, 220),
+    createdAt: row.created_at.toISOString(),
+    conversationLabel,
+    sender: {
+      id: row.sender_id,
+      displayName: row.sender_display_name,
+      avatarUrl: row.sender_avatar_url,
+    },
+    isSentByViewer: row.sender_id === viewerId,
+  }
 }
 
 function buildParentPreview(parent: {
@@ -271,6 +310,14 @@ export const messagesService = {
       parentId: body.parentMessageId ?? null,
     })
 
+    void enqueueNotifyMessageJob({
+      messageId: created.id,
+      conversationId,
+      senderId: userId,
+    }).catch(() => {
+      /* queue tùy chọn khi thiếu VAPID / Redis */
+    })
+
     return mapRowToDto(created, userId)
   },
 
@@ -367,5 +414,84 @@ export const messagesService = {
     }
 
     return { message: mapRowToDto(full, userId), conversationId }
+  },
+
+  async searchMessagesGlobal(
+    userId: string,
+    query: { q: string; cursor?: string; limit: number }
+  ): Promise<MessageSearchPageDto> {
+    const needle = query.q.trim()
+    let cursorCreatedAt: Date | undefined
+    let cursorId: string | undefined
+    if (query.cursor) {
+      const c = decodeSearchCursor(query.cursor)
+      cursorCreatedAt = c.createdAt
+      cursorId = c.id
+    }
+
+    const rows = await messageSearchRepository.searchGlobal({
+      userId,
+      needle,
+      limit: query.limit,
+      cursorCreatedAt,
+      cursorId,
+    })
+
+    const hasMore = rows.length > query.limit
+    const slice = hasMore ? rows.slice(0, query.limit) : rows
+    const last = slice[slice.length - 1]
+    const nextCursor =
+      hasMore && last
+        ? encodeSearchCursor(last.created_at, last.message_id)
+        : null
+
+    return {
+      items: slice.map((r) => mapSearchRow(r, userId)),
+      nextCursor,
+      hasMore,
+    }
+  },
+
+  async searchMessagesInRoom(
+    userId: string,
+    conversationId: string,
+    query: { q: string; cursor?: string; limit: number }
+  ): Promise<MessageSearchPageDto> {
+    const participant = await messagesRepository.findParticipant(userId, conversationId)
+    if (!participant) {
+      throw new AppError('Không có quyền truy cập room này', 403, 'FORBIDDEN')
+    }
+
+    const needle = query.q.trim()
+    let cursorCreatedAt: Date | undefined
+    let cursorId: string | undefined
+    if (query.cursor) {
+      const c = decodeSearchCursor(query.cursor)
+      cursorCreatedAt = c.createdAt
+      cursorId = c.id
+    }
+
+    const rows = await messageSearchRepository.searchInRoom({
+      userId,
+      conversationId,
+      needle,
+      limit: query.limit,
+      cursorCreatedAt,
+      cursorId,
+    })
+
+    const hasMore = rows.length > query.limit
+    const slice = hasMore ? rows.slice(0, query.limit) : rows
+    const last = slice[slice.length - 1]
+    const nextCursor =
+      hasMore && last
+        ? encodeSearchCursor(last.created_at, last.message_id)
+        : null
+
+    return {
+      items: slice.map((r) => mapSearchRow(r, userId)),
+      nextCursor,
+      hasMore,
+    }
   },
 }

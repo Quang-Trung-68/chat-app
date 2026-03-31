@@ -1,11 +1,15 @@
 import type { MessageType } from '@prisma/client'
+import { MAX_PINS_PER_CONVERSATION } from '@chat-app/shared-constants'
 import { AppError } from '@/shared/errors/AppError'
 import { messagesRepository } from '@/features/messages/messages.repository'
+import { io } from '@/features/sockets/socketServer'
+import { emitPinsUpdatedToRoom } from '@/features/sockets/pinsBroadcast'
 import { roomsRepository } from './rooms.repository'
 import type {
   CreateGroupBody,
   CreatedRoomDto,
   LastMessageDto,
+  PinnedMessageItemDto,
   RoomListItemDto,
 } from './rooms.types'
 
@@ -13,6 +17,17 @@ function mapMessageTypeToLastFileType(type: MessageType): LastMessageDto['fileTy
   if (type === 'IMAGE') return 'IMAGE'
   if (type === 'FILE') return 'DOCUMENT'
   return null
+}
+
+function previewFromPinnedMessageRow(m: {
+  content: string | null
+  type: MessageType
+  attachments: { id: string }[]
+}): string {
+  const t = m.content?.trim()
+  if (t) return t.length > 120 ? `${t.slice(0, 119)}…` : t
+  if (m.attachments.length > 0 || m.type === 'IMAGE') return 'Ảnh'
+  return '…'
 }
 
 export const roomsService = {
@@ -142,5 +157,78 @@ export const roomsService = {
 
     await roomsRepository.updateParticipantLastReadAt(userId, conversationId, lastReadAt)
     return lastReadAt
+  },
+
+  async listPins(userId: string, conversationId: string): Promise<PinnedMessageItemDto[]> {
+    const participant = await messagesRepository.findParticipant(userId, conversationId)
+    if (!participant) {
+      throw new AppError('Không có quyền trong room này', 403, 'FORBIDDEN')
+    }
+
+    const rows = await roomsRepository.listPinnedMessagesForConversation(conversationId)
+    return rows.map((r) => ({
+      messageId: r.messageId,
+      pinnedAt: r.pinnedAt,
+      pinnedBy: {
+        id: r.user.id,
+        username: r.user.username,
+        displayName: r.user.displayName,
+        avatarUrl: r.user.avatarUrl,
+      },
+      sender: {
+        id: r.message.sender.id,
+        username: r.message.sender.username,
+        displayName: r.message.sender.displayName,
+        avatarUrl: r.message.sender.avatarUrl,
+      },
+      preview: previewFromPinnedMessageRow(r.message),
+    }))
+  },
+
+  async pinMessage(userId: string, conversationId: string, messageId: string): Promise<void> {
+    const participant = await messagesRepository.findParticipant(userId, conversationId)
+    if (!participant) {
+      throw new AppError('Không có quyền trong room này', 403, 'FORBIDDEN')
+    }
+
+    const meta = await messagesRepository.findMessageMeta(messageId)
+    if (!meta || meta.deletedAt !== null) {
+      throw new AppError('Không tìm thấy tin nhắn', 404, 'NOT_FOUND')
+    }
+    if (meta.conversationId !== conversationId) {
+      throw new AppError('Tin nhắn không thuộc room này', 400, 'INVALID_MESSAGE')
+    }
+
+    const existing = await roomsRepository.findPinnedRow(conversationId, messageId)
+    if (existing) {
+      throw new AppError('Tin đã được ghim', 409, 'ALREADY_PINNED')
+    }
+
+    const count = await roomsRepository.countPinnedInConversation(conversationId)
+    if (count >= MAX_PINS_PER_CONVERSATION) {
+      throw new AppError(`Tối đa ${MAX_PINS_PER_CONVERSATION} tin ghim mỗi hội thoại`, 400, 'PIN_LIMIT')
+    }
+
+    await roomsRepository.createPinnedMessage({
+      conversationId,
+      messageId,
+      pinnedBy: userId,
+    })
+    emitPinsUpdatedToRoom(io, conversationId)
+  },
+
+  async unpinMessage(userId: string, conversationId: string, messageId: string): Promise<void> {
+    const participant = await messagesRepository.findParticipant(userId, conversationId)
+    if (!participant) {
+      throw new AppError('Không có quyền trong room này', 403, 'FORBIDDEN')
+    }
+
+    const existing = await roomsRepository.findPinnedRow(conversationId, messageId)
+    if (!existing) {
+      throw new AppError('Tin chưa được ghim', 404, 'NOT_PINNED')
+    }
+
+    await roomsRepository.deletePinnedMessage(conversationId, messageId)
+    emitPinsUpdatedToRoom(io, conversationId)
   },
 }

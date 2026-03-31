@@ -185,4 +185,69 @@ export const roomsRepository = {
       select: { lastReadAt: true },
     })
   },
+
+  countPinnedInConversation(conversationId: string) {
+    return prisma.pinnedMessage.count({ where: { conversationId } })
+  },
+
+  findPinnedRow(conversationId: string, messageId: string) {
+    return prisma.pinnedMessage.findFirst({
+      where: { conversationId, messageId },
+      select: { id: true },
+    })
+  },
+
+  createPinnedMessage(input: { conversationId: string; messageId: string; pinnedBy: string }) {
+    return prisma.pinnedMessage.create({
+      data: input,
+      select: { id: true },
+    })
+  },
+
+  deletePinnedMessage(conversationId: string, messageId: string) {
+    return prisma.pinnedMessage.deleteMany({
+      where: { conversationId, messageId },
+    })
+  },
+
+  listPinnedMessagesForConversation(conversationId: string) {
+    return prisma.pinnedMessage.findMany({
+      where: {
+        conversationId,
+        message: { deletedAt: null },
+      },
+      orderBy: { pinnedAt: 'desc' },
+      select: {
+        messageId: true,
+        pinnedAt: true,
+        user: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            avatarUrl: true,
+          },
+        },
+        message: {
+          select: {
+            id: true,
+            content: true,
+            type: true,
+            sender: {
+              select: {
+                id: true,
+                username: true,
+                displayName: true,
+                avatarUrl: true,
+              },
+            },
+            attachments: {
+              take: 1,
+              select: { id: true },
+            },
+          },
+        },
+      },
+    })
+  },
 }
