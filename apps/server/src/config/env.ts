@@ -71,4 +71,7 @@ export const env = {
   VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY || '',
   /** `mailto:you@example.com` hoặc URL trang chủ (chuẩn web-push). */
   VAPID_SUBJECT: process.env.VAPID_SUBJECT || 'mailto:noreply@localhost',
+  /** Metered TURN — subdomain app + API key từ dashboard. Thiếu → GET /api/webrtc/turn-credentials trả 500. */
+  METERED_APP_NAME: process.env.METERED_APP_NAME || '',
+  METERED_API_KEY: process.env.METERED_API_KEY || '',
 }

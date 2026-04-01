@@ -17,6 +17,7 @@ import { ContactsFriendsPage } from '@/features/contacts/pages/ContactsFriendsPa
 import { ContactsGroupsPage } from '@/features/contacts/pages/ContactsGroupsPage'
 import { ContactsRequestsPage } from '@/features/contacts/pages/ContactsRequestsPage'
 import { ContactsGroupInvitesPage } from '@/features/contacts/pages/ContactsGroupInvitesPage'
+import { CallsPlaceholderPage } from '@/features/call/pages/CallsPlaceholderPage'
 
 export function AppRoutes() {
   return (
@@ -100,6 +101,17 @@ export function AppRoutes() {
         <Route path="requests" element={<ContactsRequestsPage />} />
         <Route path="group-invites" element={<ContactsGroupInvitesPage />} />
       </Route>
+
+      <Route
+        path="/calls"
+        element={
+          <ProtectedRoute>
+            <VerifiedRoute>
+              <CallsPlaceholderPage />
+            </VerifiedRoute>
+          </ProtectedRoute>
+        }
+      />
 
       <Route path="*" element={<Navigate to="/chat" replace />} />
     </Routes>

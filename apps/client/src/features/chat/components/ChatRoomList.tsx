@@ -18,9 +18,10 @@ import { SEARCH_MESSAGES } from '@chat-app/shared-constants'
 type ChatRoomListProps = {
   rooms: RoomListItem[] | undefined
   currentUserId: string | undefined
+  className?: string
 }
 
-export function ChatRoomList({ rooms, currentUserId }: ChatRoomListProps) {
+export function ChatRoomList({ rooms, currentUserId, className }: ChatRoomListProps) {
   const { conversationId } = useParams()
   useMinuteTicker()
   const typingByConversation = useTypingPresenceStore((s) => s.typingByConversation)
@@ -72,7 +73,12 @@ export function ChatRoomList({ rooms, currentUserId }: ChatRoomListProps) {
   }
 
   return (
-    <div className="flex h-full min-h-0 w-full max-w-[300px] shrink-0 flex-col border-r border-border/80 bg-white">
+    <div
+      className={cn(
+        'flex h-full min-h-0 w-full shrink-0 flex-col border-r border-border/80 bg-white lg:max-w-[300px]',
+        className
+      )}
+    >
       <ChatGlobalSearchToolbar
         q={q}
         onQChange={setQ}

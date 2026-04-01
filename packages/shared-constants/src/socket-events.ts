@@ -25,6 +25,10 @@ export const SOCKET_EVENTS = {
   FRIEND_REQUEST_RECEIVED: 'friend:request:received',
   /** Server → user:{userId}: lời mời được chấp nhận / trạng thái bạn bè đổi. */
   FRIEND_UPDATED: 'friend:updated',
+  /** WebRTC voice (DM): relay offer / answer / ICE — payload JSON string. */
+  CALL_SIGNAL: 'call:signal',
+  /** Kết thúc / từ chối cuộc gọi thoại. */
+  CALL_END: 'call:end',
 } as const
 
 export type SocketEventKey = keyof typeof SOCKET_EVENTS

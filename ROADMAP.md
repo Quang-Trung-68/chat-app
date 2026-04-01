@@ -219,9 +219,15 @@ Code: `modules/auth/*`, `middlewares/requireEmailVerified.ts`, `features/mail/*`
 
 ---
 
-**Bước 19 — Mobile responsive UI**
+**Bước 19 — Mobile responsive UI** ✅
 
-Breakpoint strategy: mobile-first với Tailwind. Layout: sidebar ẩn trên mobile, slide-in từ trái. `BottomNav` với các tab chính. Touch targets tối thiểu 44px. Input font-size 16px để tránh iOS zoom. Safe area insets cho notch/home indicator. Test kỹ trên iOS Safari và Android Chrome.
+- **Breakpoint:** `lg` (1024px) — dưới `lg`: rail xanh ẩn, layout chat **một cột** (danh sách ↔ thread); từ `lg`: giữ layout 3 cột desktop.
+- **Chat:** Không có `conversationId` → chỉ danh sách (full width); có `conversationId` → thread full width, **nút quay lại** (`ChevronLeft` → `/chat`) ẩn từ `lg`. Panel phải: **overlay** + lớp mờ (`lg` trở lên cột cố định); đóng bằng tap nền hoặc đóng panel.
+- **`MobileBottomNav`:** Cố định đáy, 4 tab — Tin nhắn (`/chat`), Danh bạ (`/contacts/friends`), Hồ sơ (`/profile`), Cài đặt (`/settings/general`); ẩn từ `lg`. `min-h-11` (~44px) cho vùng tap.
+- **Padding đáy:** `pb-[calc(3.75rem+env(safe-area-inset-bottom))]` trên các shell có bottom nav (`ChatPage`, `AppShellLayout`, `ContactsLayout`).
+- **Safe area / iOS:** `pt-[env(safe-area-inset-top)]` trên shell; `viewport-fit=cover` trong `index.html`. `Input` (shadcn) dùng `text-base md:text-sm` để tránh zoom ô nhập iOS.
+- **Danh bạ:** Dưới `md` xếp dọc (subnav + nội dung); từ `md` hai cột như cũ.
+- **Code:** `shared/components/MobileBottomNav.tsx`, `ChatPage.tsx`, `ChatThread.tsx` (header), `ChatRightPanel.tsx` (overlay `max-lg:`), `ChatRoomList` / `ChatNavRail` (`className`), `AppShellLayout.tsx`, `ContactsLayout.tsx`, `index.html`.
 
 ---
 

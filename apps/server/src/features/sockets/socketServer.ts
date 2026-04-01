@@ -11,6 +11,7 @@ import {
 } from './typingPresence.handlers'
 import { registerRoomReadHandlers } from './roomRead.handlers'
 import { registerConversationJoinHandlers } from './conversationJoin.handlers'
+import { registerCallHandlers } from './callHandlers'
 import { attachRedisAdapter } from './setupRedisAdapter'
 import './socket.types'
 
@@ -62,6 +63,7 @@ export function initSocketServer(httpServer: HttpServer) {
     registerTypingPresenceHandlers(socket)
     registerRoomReadHandlers(io, socket)
     registerConversationJoinHandlers(socket)
+    registerCallHandlers(io, socket)
 
     socket.on('disconnect', () => {
       void onSocketPresenceDisconnect(io, userId).catch((e) => {

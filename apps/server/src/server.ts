@@ -20,6 +20,7 @@ import configRoutes from './features/config/config.routes'
 import usersRoutes from './features/users/users.routes'
 import friendsRoutes from './features/friends/friends.routes'
 import pushRoutes from './features/push/push.routes'
+import webrtcRoutes from './features/webrtc/webrtc.routes'
 import { globalErrorHandler } from './middlewares/globalErrorHandler'
 import { initSocketServer } from './features/sockets/socketServer'
 
@@ -59,6 +60,7 @@ app.use('/api/config', configRoutes)
 app.use('/api/users', usersRoutes)
 app.use('/api/friends', friendsRoutes)
 app.use('/api/push', pushRoutes)
+app.use('/api/webrtc', webrtcRoutes)
 
 // ─── Global error handler (must be LAST middleware) ───────────────────────────
 app.use(globalErrorHandler)

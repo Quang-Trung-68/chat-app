@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import type { InfiniteData } from '@tanstack/react-query'
 import { useQueryClient } from '@tanstack/react-query'
 import { usePendingImageUploadsStore } from '@/features/messages/store/pendingImageUploads.store'
 import { MAX_PINS_PER_CONVERSATION } from '@chat-app/shared-constants'
-import { ChevronDown, Loader2, PanelRight, Phone, Pin, Search, Video } from 'lucide-react'
+import { ChevronDown, ChevronLeft, Loader2, PanelRight, Phone, Pin, Search, Video } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -33,6 +33,9 @@ import { cn } from '@/lib/utils'
 import { EMPTY_STRING_ARRAY } from '@/lib/zustandEmpty'
 import { displayNameForMessageSender, userDisplayName } from '@/lib/userDisplay'
 import { useRoomPinMutations, useRoomPinsQuery } from '@/features/rooms/queries/useRoomPins'
+import { useTurnCredentials } from '@/features/call/hooks/useTurnCredentials'
+import { useVoiceCall } from '@/features/call/hooks/useVoiceCall'
+import { VoiceCallOverlay } from '@/features/call/components/VoiceCallOverlay'
 
 type ChatThreadProps = {
   conversationId: string
@@ -90,6 +93,27 @@ export function ChatThread({
   const location = useLocation()
   const { socket, connected } = useSocket()
   useRoomReadSync(socket, connected, conversationId)
+
+  const dmPeer = useMemo(() => {
+    if (!room || room.type !== 'DM' || !currentUserId) return null
+    const p = room.participants.find((x) => x.id !== currentUserId)
+    if (!p) return null
+    return { id: p.id, displayName: userDisplayName(p), avatarUrl: p.avatarUrl }
+  }, [room, currentUserId])
+
+  const { iceServers, isLoading: turnLoading } = useTurnCredentials({
+    enabled: Boolean(room?.type === 'DM' && conversationId),
+  })
+
+  const voice = useVoiceCall({
+    conversationId,
+    currentUserId,
+    socket,
+    socketConnected: connected,
+    peer: dmPeer,
+    iceServers,
+    turnLoading,
+  })
 
   const infinite = useRoomMessagesInfinite(conversationId)
   const merged = useMergedRoomMessages(conversationId, infinite.data?.pages)
@@ -488,8 +512,18 @@ export function ChatThread({
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-white motion-reduce:transition-none">
       <header className="relative z-20 flex shrink-0 flex-col border-b border-border/60 py-2">
-        <div className="flex items-center justify-between gap-2 px-3">
-          <div className="flex min-w-0 items-center gap-2.5">
+        <div className="flex items-center justify-between gap-2 px-2 sm:px-3">
+          <div className="flex min-w-0 items-center gap-1 sm:gap-2.5">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-11 w-11 shrink-0 lg:hidden"
+              asChild
+            >
+              <Link to="/chat" aria-label="Về danh sách tin nhắn">
+                <ChevronLeft className="h-6 w-6" />
+              </Link>
+            </Button>
             <Avatar className="h-9 w-9 shrink-0">
               <AvatarFallback className="bg-[#0068ff]/15 text-sm font-medium text-[#0068ff]">
                 {title.slice(0, 1).toUpperCase()}
@@ -513,13 +547,29 @@ export function ChatThread({
               type="button"
               variant="ghost"
               size="icon"
-              className="h-8 w-8"
-              disabled
-              title="Cuộc gọi (sắp có)"
+              className="h-11 w-11 lg:h-8 lg:w-8"
+              disabled={room?.type !== 'DM' || !connected || !dmPeer}
+              title={
+                room?.type === 'GROUP'
+                  ? 'Chỉ hỗ trợ gọi trong chat 1–1'
+                  : !connected
+                    ? 'Đang kết nối…'
+                    : 'Gọi thoại'
+              }
+              aria-label="Gọi thoại"
+              onClick={() => void voice.startOutgoing()}
             >
               <Phone className="h-4 w-4" />
             </Button>
-            <Button type="button" variant="ghost" size="icon" className="h-8 w-8" disabled title="Gọi video (sắp có)">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-11 w-11 lg:h-8 lg:w-8"
+              disabled
+              title="Gọi video — sắp có"
+              aria-label="Gọi video — sắp có"
+            >
               <Video className="h-4 w-4" />
             </Button>
             <Button
@@ -527,7 +577,7 @@ export function ChatThread({
               variant="ghost"
               size="icon"
               className={cn(
-                'h-8 w-8',
+                'h-11 w-11 lg:h-8 lg:w-8',
                 roomSearchOpen && 'bg-blue-50 text-[#0068ff] hover:bg-blue-100 hover:text-[#0068ff]'
               )}
               onClick={onToggleRoomSearch}
@@ -541,7 +591,10 @@ export function ChatThread({
               type="button"
               variant="ghost"
               size="icon"
-              className={cn('h-8 w-8', rightPanelOpen && 'bg-blue-50 text-[#0068ff] hover:bg-blue-100 hover:text-[#0068ff]')}
+              className={cn(
+                'h-11 w-11 lg:h-8 lg:w-8',
+                rightPanelOpen && 'bg-blue-50 text-[#0068ff] hover:bg-blue-100 hover:text-[#0068ff]'
+              )}
               onClick={onToggleRightPanel}
               title="Thông tin hội thoại"
             >
@@ -916,6 +969,21 @@ export function ChatThread({
         }}
         urls={lightbox?.urls ?? []}
         startIndex={lightbox?.startIndex ?? 0}
+      />
+
+      <VoiceCallOverlay
+        open={voice.uiState !== 'idle'}
+        uiState={voice.uiState}
+        peer={dmPeer}
+        error={voice.error}
+        isMuted={voice.isMuted}
+        callDurationLabel={voice.callDurationLabel}
+        remoteAudioRef={voice.remoteAudioRef}
+        onAccept={() => void voice.acceptIncoming()}
+        onReject={voice.rejectIncoming}
+        onCancelOutgoing={voice.cancelOutgoing}
+        onEnd={voice.endCall}
+        onToggleMute={voice.toggleMute}
       />
     </div>
   )

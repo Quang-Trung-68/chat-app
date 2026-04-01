@@ -6,6 +6,7 @@ import { SocketBootstrap } from './SocketBootstrap'
 import { DocumentTitleSync } from '@/features/app/DocumentTitleSync'
 import { PushPermissionBootstrap } from './PushPermissionBootstrap'
 import { AppRoutes } from '@/routes'
+import { GlobalIncomingCallBanner } from '@/features/call/components/GlobalIncomingCallBanner'
 
 export function App() {
   return (
@@ -13,6 +14,7 @@ export function App() {
       <BrowserRouter>
         <AuthBootstrap />
         <DocumentTitleSync />
+        <GlobalIncomingCallBanner />
         <SocketBootstrap />
         <PushPermissionBootstrap />
         <ErrorBoundary>

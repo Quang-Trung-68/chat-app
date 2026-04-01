@@ -5,12 +5,14 @@ import { useChatRealtime } from '@/features/messages/hooks/useChatRealtime'
 import { useTypingPresenceRealtime } from '@/features/sockets/useTypingPresenceRealtime'
 import { useReceiptRealtime } from '@/features/rooms/hooks/useReceiptRealtime'
 import { useFriendRealtime } from '@/features/friends/hooks/useFriendRealtime'
+import { useGlobalCallSignals } from '@/features/sockets/useGlobalCallSignals'
 
 /** Một kết nối Socket.IO + realtime chat + typing/presence + read receipts + bạn bè. `useRoomReadSync` gọi trong `ChatThread`. */
 export function SocketBootstrap() {
   const { socket, connected } = useSocket()
   const { data: rooms } = useRoomsQuery()
   useJoinSocketRooms(socket, connected, rooms)
+  useGlobalCallSignals(socket, connected)
   useChatRealtime(socket, connected)
   useTypingPresenceRealtime(socket, connected)
   useReceiptRealtime(socket, connected)

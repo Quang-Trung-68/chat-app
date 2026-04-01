@@ -27,6 +27,7 @@ type ChatNavRailProps = {
   onLogout?: () => void
   /** Chấm đỏ trên icon Danh bạ khi còn lời mời PENDING (kết bạn / sau này nhóm). */
   contactsPendingBadge?: boolean
+  className?: string
 }
 
 export function ChatNavRail({
@@ -35,10 +36,12 @@ export function ChatNavRail({
   avatarUrl,
   onLogout,
   contactsPendingBadge = false,
+  className,
 }: ChatNavRailProps) {
   const location = useLocation()
   const initial = (displayName ?? '?').slice(0, 1).toUpperCase()
   const chatActive = location.pathname.startsWith('/chat')
+  const callsActive = location.pathname.startsWith('/calls')
   const contactsActive = location.pathname.startsWith('/contacts')
 
   return (
@@ -46,7 +49,8 @@ export function ChatNavRail({
       <div
         className={cn(
           'flex w-[60px] shrink-0 flex-col items-center gap-2 py-3 shadow-[2px_0_8px_-2px_rgba(0,0,0,0.08)]',
-          'bg-[#005ae0] text-white'
+          'bg-[#005ae0] text-white',
+          className
         )}
       >
         <DropdownMenu>
@@ -124,18 +128,21 @@ export function ChatNavRail({
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
-                type="button"
                 variant="ghost"
                 size="icon"
-                disabled
-                className="text-white hover:bg-white/15 hover:text-white"
-                aria-label="Cuộc gọi (sắp có)"
+                className={cn(
+                  'text-white hover:bg-white/15 hover:text-white',
+                  callsActive && 'bg-white/20'
+                )}
+                asChild
               >
-                <Phone className="h-5 w-5" />
+                <Link to="/calls" aria-label="Cuộc gọi">
+                  <Phone className="h-5 w-5" />
+                </Link>
               </Button>
             </TooltipTrigger>
             <TooltipContent side="right" className="text-xs">
-              Cuộc gọi (sắp có)
+              Cuộc gọi
             </TooltipContent>
           </Tooltip>
 

@@ -25,6 +25,7 @@ type ChatRightPanelProps = {
   room: RoomListItem
   currentUserId: string | undefined
   onClose: () => void
+  className?: string
   /** Cuộn tới tin trong thread (đăng ký từ ChatThread). */
   onPinnedMessageClick?: (messageId: string) => void
   /** Hiển thị khối tìm kiếm trong hội thoại (toggle từ icon header ChatThread). */
@@ -62,6 +63,7 @@ export function ChatRightPanel({
   roomSearchOpen,
   onCloseRoomSearch,
   onRoomSearchPickMessage,
+  className,
 }: ChatRightPanelProps) {
   const title = getRoomTitle(room, currentUserId)
   const initial = title.slice(0, 1).toUpperCase()
@@ -73,7 +75,13 @@ export function ChatRightPanel({
   const [linksOpen, setLinksOpen] = useState(false)
 
   return (
-    <div className="flex h-full w-full max-w-[320px] shrink-0 flex-col border-l border-border/80 bg-white">
+    <div
+      className={cn(
+        'flex h-full w-full max-w-[320px] shrink-0 flex-col border-l border-border/80 bg-white',
+        'max-lg:fixed max-lg:inset-y-0 max-lg:right-0 max-lg:z-40 max-lg:max-w-[min(100vw,320px)] max-lg:border-l-0 max-lg:shadow-2xl',
+        className
+      )}
+    >
       {
         roomSearchOpen ? null : (
           <div className="flex shrink-0 items-center justify-between border-b border-border/60 px-3 py-2.5">
