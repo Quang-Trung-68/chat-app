@@ -1,5 +1,6 @@
 import type { MessageType } from '@prisma/client'
-import { MAX_PINS_PER_CONVERSATION } from '@chat-app/shared-constants'
+import { prisma } from '@/config/prisma'
+import { MAX_PINS_PER_CONVERSATION, SOCKET_EVENTS } from '@chat-app/shared-constants'
 import { AppError } from '@/shared/errors/AppError'
 import { friendsService } from '@/features/friends/friends.service'
 import { messagesRepository } from '@/features/messages/messages.repository'
@@ -83,6 +84,7 @@ export const roomsService = {
           username: p.user.username,
           displayName: p.user.displayName,
           avatarUrl: p.user.avatarUrl,
+          role: p.role,
         })),
         lastMessage: last
           ? {
@@ -97,9 +99,10 @@ export const roomsService = {
       })
     }
 
+    /** Hội thoại chưa có tin: dùng createdAt làm điểm mới — tránh coi là -1 và bị đẩy xuống cuối. */
     items.sort((a, b) => {
-      const ta = a.lastMessage?.createdAt.getTime() ?? -1
-      const tb = b.lastMessage?.createdAt.getTime() ?? -1
+      const ta = a.lastMessage?.createdAt.getTime() ?? a.createdAt.getTime()
+      const tb = b.lastMessage?.createdAt.getTime() ?? b.createdAt.getTime()
       if (tb !== ta) return tb - ta
       return b.createdAt.getTime() - a.createdAt.getTime()
     })
@@ -137,6 +140,13 @@ export const roomsService = {
       creatorId: userId,
       memberIds: uniqueParticipantIds,
     })
+
+    for (const uid of [userId, ...uniqueParticipantIds]) {
+      io.to(`user:${uid}`).emit(SOCKET_EVENTS.ROOM_LIST_UPDATED, {
+        conversationId: conversation.id,
+        sidebarHint: uid === userId ? null : 'Bạn vừa được thêm vào nhóm',
+      })
+    }
 
     return {
       id: conversation.id,
@@ -242,5 +252,78 @@ export const roomsService = {
 
     await roomsRepository.deletePinnedMessage(conversationId, messageId)
     emitPinsUpdatedToRoom(io, conversationId)
+  },
+
+  async transferGroupOwner(actorId: string, conversationId: string, newOwnerId: string): Promise<void> {
+    if (actorId === newOwnerId) {
+      throw new AppError('Chọn thành viên khác', 400, 'VALIDATION_ERROR')
+    }
+    const conv = await prisma.conversation.findFirst({
+      where: { id: conversationId, deletedAt: null, type: 'GROUP' },
+      select: { id: true },
+    })
+    if (!conv) {
+      throw new AppError('Không tìm thấy nhóm', 404, 'NOT_FOUND')
+    }
+    const actor = await prisma.conversationParticipant.findFirst({
+      where: { conversationId, userId: actorId, deletedAt: null },
+      select: { role: true },
+    })
+    if (!actor || actor.role !== 'OWNER') {
+      throw new AppError('Chỉ quản trị viên mới thực hiện được', 403, 'FORBIDDEN')
+    }
+    const target = await prisma.conversationParticipant.findFirst({
+      where: { conversationId, userId: newOwnerId, deletedAt: null },
+      select: { id: true },
+    })
+    if (!target) {
+      throw new AppError('Thành viên không trong nhóm', 400, 'INVALID_MEMBER')
+    }
+    await prisma.$transaction([
+      prisma.conversationParticipant.update({
+        where: {
+          conversationId_userId: { conversationId, userId: actorId },
+        },
+        data: { role: 'MEMBER' },
+      }),
+      prisma.conversationParticipant.update({
+        where: {
+          conversationId_userId: { conversationId, userId: newOwnerId },
+        },
+        data: { role: 'OWNER' },
+      }),
+    ])
+    const userIds = await roomsRepository.listActiveParticipantUserIds(conversationId)
+    for (const uid of userIds) {
+      io.to(`user:${uid}`).emit(SOCKET_EVENTS.ROOM_LIST_UPDATED, {
+        conversationId,
+        sidebarHint: null,
+      })
+    }
+  },
+
+  async disbandGroup(actorId: string, conversationId: string): Promise<void> {
+    const conv = await prisma.conversation.findFirst({
+      where: { id: conversationId, deletedAt: null, type: 'GROUP' },
+      select: { id: true },
+    })
+    if (!conv) {
+      throw new AppError('Không tìm thấy nhóm', 404, 'NOT_FOUND')
+    }
+    const membership = await prisma.conversationParticipant.findFirst({
+      where: { conversationId, userId: actorId, deletedAt: null },
+      select: { role: true },
+    })
+    if (!membership || membership.role !== 'OWNER') {
+      throw new AppError('Chỉ quản trị viên mới giải tán được nhóm', 403, 'FORBIDDEN')
+    }
+    const userIds = await roomsRepository.listActiveParticipantUserIds(conversationId)
+    await roomsRepository.disbandGroupSoftDelete(conversationId)
+    for (const uid of userIds) {
+      io.to(`user:${uid}`).emit(SOCKET_EVENTS.ROOM_LIST_UPDATED, {
+        conversationId,
+        sidebarHint: null,
+      })
+    }
   },
 }

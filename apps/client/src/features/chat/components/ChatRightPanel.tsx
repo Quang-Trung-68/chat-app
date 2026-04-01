@@ -1,4 +1,6 @@
-import { useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import {
   Bell,
   ChevronDown,
@@ -6,6 +8,7 @@ import {
   FileText,
   Image as ImageIcon,
   Link2,
+  MoreHorizontal,
   PanelRightClose,
   Pin,
   UserPlus,
@@ -13,9 +16,19 @@ import {
 } from 'lucide-react'
 import { MAX_PINS_PER_CONVERSATION } from '@chat-app/shared-constants'
 import { ChatThreadRoomSearchPanel } from './ChatThreadRoomSearchPanel'
+import { DisbandGroupConfirmDialog } from './DisbandGroupConfirmDialog'
+import { PromoteAdminConfirmDialog } from './PromoteAdminConfirmDialog'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { useRoomPinsQuery } from '@/features/rooms/queries/useRoomPins'
+import { roomsKeys } from '@/features/rooms/rooms.keys'
+import { disbandGroup, transferGroupOwner } from '@/features/rooms/api/rooms.api'
 import type { RoomListItem } from '@/features/rooms/types/room.types'
 import { getRoomTitle } from '../utils/roomTitle'
 import { cn } from '@/lib/utils'
@@ -68,11 +81,47 @@ export function ChatRightPanel({
   const title = getRoomTitle(room, currentUserId)
   const initial = title.slice(0, 1).toUpperCase()
   const { data: pins = [] } = useRoomPinsQuery(room.id)
+  const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const [pinsOpen, setPinsOpen] = useState(true)
   const [membersOpen, setMembersOpen] = useState(true)
   const [mediaOpen, setMediaOpen] = useState(false)
   const [filesOpen, setFilesOpen] = useState(false)
   const [linksOpen, setLinksOpen] = useState(false)
+  const [disbandDialogOpen, setDisbandDialogOpen] = useState(false)
+  const [promoteTarget, setPromoteTarget] = useState<{ id: string; name: string } | null>(null)
+
+  const isGroupOwner =
+    room.type === 'GROUP' &&
+    Boolean(currentUserId && room.participants.some((p) => p.id === currentUserId && p.role === 'OWNER'))
+
+  const sortedParticipants = useMemo(() => {
+    if (room.type !== 'GROUP') return room.participants
+    return [...room.participants].sort((a, b) => {
+      const ao = a.role === 'OWNER' ? 0 : 1
+      const bo = b.role === 'OWNER' ? 0 : 1
+      if (ao !== bo) return ao - bo
+      return userDisplayName(a).localeCompare(userDisplayName(b), 'vi', { sensitivity: 'base' })
+    })
+  }, [room.participants, room.type])
+
+  const disbandMut = useMutation({
+    mutationFn: () => disbandGroup(room.id),
+    onSuccess: () => {
+      setDisbandDialogOpen(false)
+      void queryClient.invalidateQueries({ queryKey: roomsKeys.all })
+      onClose()
+      navigate('/chat')
+    },
+  })
+
+  const transferMut = useMutation({
+    mutationFn: (newOwnerId: string) => transferGroupOwner(room.id, newOwnerId),
+    onSuccess: () => {
+      setPromoteTarget(null)
+      void queryClient.invalidateQueries({ queryKey: roomsKeys.all })
+    },
+  })
 
   return (
     <div
@@ -237,25 +286,96 @@ export function ChatRightPanel({
                 <span>Thành viên ({room.participants.length})</span>
               </CollapsibleHeader>
               {membersOpen ? (
-                <ul className="space-y-2 pb-3 pt-1">
-                  {room.participants.map((p) => {
+                <ul className="space-y-1 pb-3 pt-1">
+                  {sortedParticipants.map((p) => {
                     const label = userDisplayName(p)
+                    const isOwner = room.type === 'GROUP' && p.role === 'OWNER'
+                    const canPromote =
+                      isGroupOwner &&
+                      Boolean(currentUserId && p.id !== currentUserId && p.role !== 'OWNER')
                     return (
-                      <li key={p.id} className="flex items-center gap-2">
-                        <Avatar className="h-8 w-8">
+                      <li
+                        key={p.id}
+                        className="grid min-h-10 grid-cols-[2rem_1fr_2rem] items-center gap-2 py-0.5"
+                      >
+                        <Avatar className="h-8 w-8 shrink-0">
                           {p.avatarUrl ? <AvatarImage src={p.avatarUrl} alt="" /> : null}
                           <AvatarFallback className="text-xs">{label.slice(0, 1).toUpperCase()}</AvatarFallback>
                         </Avatar>
-                        <span className="truncate text-sm">{label}</span>
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="truncate text-sm">{label}</span>
+                          {isOwner ? (
+                            <span className="inline-flex shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold leading-none text-amber-900">
+                              Quản trị viên
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-end">
+                          {canPromote ? (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-muted-foreground"
+                                  aria-label={`Thao tác ${label}`}
+                                >
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="min-w-48">
+                                <DropdownMenuItem
+                                  disabled={transferMut.isPending}
+                                  onClick={() => setPromoteTarget({ id: p.id, name: label })}
+                                >
+                                  Phong quản trị viên
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          ) : (
+                            <span className="shrink-0" aria-hidden />
+                          )}
+                        </div>
                       </li>
                     )
                   })}
                 </ul>
               ) : null}
+              {room.type === 'GROUP' && isGroupOwner ? (
+                <div className="border-t border-border/40 pb-3 pt-3">
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    className="w-full"
+                    disabled={disbandMut.isPending}
+                    onClick={() => setDisbandDialogOpen(true)}
+                  >
+                    {disbandMut.isPending ? 'Đang xử lý…' : 'Giải tán nhóm'}
+                  </Button>
+                </div>
+              ) : null}
             </div>
           </div>
         </>
       ) : null}
+      <DisbandGroupConfirmDialog
+        open={disbandDialogOpen}
+        onOpenChange={setDisbandDialogOpen}
+        onConfirm={() => disbandMut.mutate()}
+        isPending={disbandMut.isPending}
+      />
+      <PromoteAdminConfirmDialog
+        open={promoteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setPromoteTarget(null)
+        }}
+        memberName={promoteTarget?.name ?? ''}
+        onConfirm={() => {
+          if (promoteTarget) transferMut.mutate(promoteTarget.id)
+        }}
+        isPending={transferMut.isPending}
+      />
     </div>
   )
 }

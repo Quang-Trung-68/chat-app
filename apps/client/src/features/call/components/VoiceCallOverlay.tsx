@@ -1,4 +1,4 @@
-import type { RefObject } from 'react'
+import type { LegacyRef, RefObject } from 'react'
 import { Loader2, Mic, MicOff, Phone, PhoneOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -47,7 +47,7 @@ export function VoiceCallOverlay({
       aria-modal
       aria-labelledby="voice-call-title"
     >
-      <audio ref={remoteAudioRef} autoPlay className="sr-only" />
+      <audio ref={remoteAudioRef as LegacyRef<HTMLAudioElement>} autoPlay className="sr-only" />
 
       <div className="flex max-w-sm flex-col items-center gap-6 text-center">
         <Avatar className="h-24 w-24 border-2 border-white/20 shadow-lg">

@@ -31,7 +31,8 @@ export function ContactsFriendsPage() {
   const queryClient = useQueryClient()
   const { data, isLoading, isError } = useFriendsAcceptedQuery()
   const [filter, setFilter] = useState('')
-  const [stubOpen, setStubOpen] = useState<'info' | 'alias' | null>(null)
+  const [infoFriend, setInfoFriend] = useState<AcceptedFriendItem | null>(null)
+  const [aliasFriend, setAliasFriend] = useState<AcceptedFriendItem | null>(null)
   const [blockOpen, setBlockOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<AcceptedFriendItem | null>(null)
 
@@ -141,7 +142,7 @@ export function ContactsFriendsPage() {
                           <DropdownMenuContent align="end" className="w-52">
                             <DropdownMenuItem
                               onClick={() => {
-                                setStubOpen('info')
+                                setInfoFriend(row)
                               }}
                             >
                               Xem thông tin
@@ -159,7 +160,7 @@ export function ContactsFriendsPage() {
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => {
-                                setStubOpen('alias')
+                                setAliasFriend(row)
                               }}
                             >
                               Đặt tên gợi nhớ
@@ -188,16 +189,62 @@ export function ContactsFriendsPage() {
         </div>
       </ScrollArea>
 
-      <Dialog open={stubOpen !== null} onOpenChange={(o) => !o && setStubOpen(null)}>
+      <Dialog open={infoFriend !== null} onOpenChange={(o) => !o && setInfoFriend(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Xem thông tin</DialogTitle>
+            <DialogDescription>Thông tin hồ sơ công khai của bạn bè.</DialogDescription>
+          </DialogHeader>
+          {infoFriend ? (
+            <div className="flex flex-col items-center gap-5 pt-1">
+              <Avatar className="h-24 w-24 ring-2 ring-border/60">
+                {infoFriend.user.avatarUrl ? (
+                  <AvatarImage src={infoFriend.user.avatarUrl} alt="" className="object-cover" />
+                ) : null}
+                <AvatarFallback className="text-2xl font-semibold">
+                  {userDisplayName(infoFriend.user).slice(0, 1).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <div className="w-full space-y-4 text-sm">
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">Tên</p>
+                  <p className="mt-0.5 text-base font-semibold text-foreground">
+                    {userDisplayName(infoFriend.user)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">Tên người dùng</p>
+                  <p className="mt-0.5 font-mono text-[15px] text-foreground">
+                    @{infoFriend.user.username}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">Bio</p>
+                  <p className="mt-0.5 min-h-5 whitespace-pre-wrap wrap-break-word text-foreground">
+                    {infoFriend.user.bio?.trim()
+                      ? infoFriend.user.bio
+                      : 'Chưa có giới thiệu.'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button type="button" onClick={() => setInfoFriend(null)}>
+              Đóng
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={aliasFriend !== null} onOpenChange={(o) => !o && setAliasFriend(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-              {stubOpen === 'info' ? 'Xem thông tin' : 'Đặt tên gợi nhớ'}
-            </DialogTitle>
+            <DialogTitle>Đặt tên gợi nhớ</DialogTitle>
             <DialogDescription>Tính năng sắp có.</DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button type="button" onClick={() => setStubOpen(null)}>
+            <Button type="button" onClick={() => setAliasFriend(null)}>
               Đóng
             </Button>
           </DialogFooter>

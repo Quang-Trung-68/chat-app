@@ -1,8 +1,9 @@
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import { MAX_PINS_PER_CONVERSATION } from '@chat-app/shared-constants'
 import {
   ChevronRight,
   Copy,
+  Download,
   Forward,
   Info,
   List,
@@ -21,6 +22,11 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import type { MessageItemDto } from '@/features/messages/types/message.types'
+import {
+  downloadImageUrl,
+  imageUrlsForMessage,
+  suggestedImageFilename,
+} from '@/features/messages/utils/messageImages'
 import { cn } from '@/lib/utils'
 
 type MessageBubbleActionsProps = {
@@ -73,6 +79,17 @@ export function MessageBubbleActions({
     }
   }, [message.attachments?.length, message.content, message.fileUrl])
 
+  const imageUrls = useMemo(() => imageUrlsForMessage(message), [message])
+
+  const downloadImages = useCallback(() => {
+    void (async () => {
+      for (let i = 0; i < imageUrls.length; i++) {
+        const url = imageUrls[i]
+        await downloadImageUrl(url, suggestedImageFilename(url, i))
+      }
+    })()
+  }, [imageUrls])
+
   return (
     <div
       className={cn(
@@ -122,6 +139,12 @@ export function MessageBubbleActions({
             <Copy className="h-4 w-4" />
             Copy tin nhắn
           </DropdownMenuItem>
+          {imageUrls.length > 0 ? (
+            <DropdownMenuItem onClick={() => downloadImages()}>
+              <Download className="h-4 w-4" />
+              Tải ảnh xuống
+            </DropdownMenuItem>
+          ) : null}
           {isPinned ? (
             <DropdownMenuItem disabled={unpinPending} onClick={() => onUnpin()}>
               <Pin className="h-4 w-4" />

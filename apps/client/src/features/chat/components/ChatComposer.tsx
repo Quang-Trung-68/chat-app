@@ -9,6 +9,113 @@ import {
 import { useQueryClient } from '@tanstack/react-query'
 import type { Socket } from 'socket.io-client'
 import { Image, Paperclip, Smile, ThumbsUp, X } from 'lucide-react'
+
+/** Lưới emoji cho hộp chọn — chèn vào ô nhập; hộp chỉ đóng khi bấm ra ngoài (không đóng khi chọn emoji). */
+const CHAT_EMOJI_GRID: string[] = [
+  '😀',
+  '😃',
+  '😄',
+  '😁',
+  '😆',
+  '😅',
+  '🤣',
+  '😂',
+  '🙂',
+  '🙃',
+  '😉',
+  '😊',
+  '😇',
+  '🥰',
+  '😍',
+  '🤩',
+  '😘',
+  '😗',
+  '😚',
+  '😙',
+  '😋',
+  '😛',
+  '😜',
+  '🤪',
+  '😝',
+  '🤑',
+  '🤗',
+  '🤭',
+  '🤫',
+  '🤔',
+  '🤐',
+  '🤨',
+  '😐',
+  '😑',
+  '😶',
+  '😏',
+  '😒',
+  '🙄',
+  '😬',
+  '🤥',
+  '😌',
+  '😔',
+  '😪',
+  '🤤',
+  '😴',
+  '😷',
+  '🤒',
+  '🤕',
+  '🤢',
+  '🤮',
+  '🤧',
+  '🥵',
+  '🥶',
+  '🥴',
+  '😵',
+  '🤯',
+  '🤠',
+  '🥳',
+  '😎',
+  '🤓',
+  '🧐',
+  '👍',
+  '👎',
+  '👌',
+  '✌️',
+  '🤞',
+  '🤟',
+  '🤘',
+  '👏',
+  '🙌',
+  '👐',
+  '🤲',
+  '🤝',
+  '🙏',
+  '❤️',
+  '🧡',
+  '💛',
+  '💚',
+  '💙',
+  '💜',
+  '🖤',
+  '💔',
+  '❣️',
+  '💕',
+  '💞',
+  '💓',
+  '💗',
+  '💖',
+  '💘',
+  '💝',
+  '🔥',
+  '✨',
+  '⭐',
+  '🌟',
+  '💯',
+  '✅',
+  '❌',
+  '⚠️',
+  '💬',
+  '🎉',
+  '🎁',
+  '📷',
+  '📎',
+]
 import { SOCKET_EVENTS } from '@chat-app/shared-constants'
 import {
   createMessage,
@@ -72,6 +179,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
     const queryClient = useQueryClient()
     const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
+    const emojiPickerRef = useRef<HTMLDivElement>(null)
+    const [emojiOpen, setEmojiOpen] = useState(false)
     const uploadCfgRef = useRef<Awaited<ReturnType<typeof fetchUploadConfig>> | null>(null)
     const pendingRef = useRef<PendingImg[]>([])
     pendingRef.current = pending
@@ -90,6 +199,16 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
         }
       }
     }, [])
+
+    useEffect(() => {
+      if (!emojiOpen) return
+      const onDown = (e: MouseEvent) => {
+        if (emojiPickerRef.current?.contains(e.target as Node)) return
+        setEmojiOpen(false)
+      }
+      document.addEventListener('mousedown', onDown)
+      return () => document.removeEventListener('mousedown', onDown)
+    }, [emojiOpen])
 
     useEffect(() => {
       setPending((prev) => {
@@ -340,16 +459,62 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
                 className="hidden"
                 onChange={(e) => void onPickFiles(e)}
               />
-              {[Smile, Paperclip].map((Icon, i) => (
-                <Tooltip key={i}>
+              <div ref={emojiPickerRef} className="relative">
+                <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button type="button" variant="ghost" size="icon" disabled className="h-8 w-8">
-                      <Icon className="h-4 w-4" />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className={cn(
+                        'h-8 w-8 text-muted-foreground hover:text-foreground',
+                        emojiOpen && 'bg-muted text-foreground'
+                      )}
+                      aria-expanded={emojiOpen}
+                      aria-haspopup="dialog"
+                      aria-label="Chèn biểu tượng cảm xúc"
+                      onClick={() => setEmojiOpen((o) => !o)}
+                    >
+                      <Smile className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Sắp có</TooltipContent>
+                  <TooltipContent>Biểu tượng cảm xúc</TooltipContent>
                 </Tooltip>
-              ))}
+                {emojiOpen ? (
+                  <div
+                    role="dialog"
+                    aria-label="Chọn emoji"
+                    className="absolute bottom-full left-0 z-40 mb-1.5 w-[min(100vw-2rem,17rem)] overflow-x-hidden rounded-lg border border-border bg-popover p-2 shadow-lg"
+                    onMouseDown={(e) => e.preventDefault()}
+                  >
+                    <div className="emoji-picker-scroll max-h-[min(40vh,220px)]">
+                      <div className="grid grid-cols-8 gap-1">
+                        {CHAT_EMOJI_GRID.map((emoji) => (
+                          <button
+                            key={emoji}
+                            type="button"
+                            className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-md text-lg leading-none hover:bg-muted active:bg-muted/80"
+                            onClick={() => {
+                              setText((prev) => prev + emoji)
+                              requestAnimationFrame(() => inputRef.current?.focus())
+                            }}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button type="button" variant="ghost" size="icon" disabled className="h-8 w-8">
+                    <Paperclip className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Sắp có</TooltipContent>
+              </Tooltip>
             </div>
             <Input
               ref={inputRef}

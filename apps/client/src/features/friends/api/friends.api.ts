@@ -5,6 +5,8 @@ export type PublicUser = {
   username: string
   displayName: string
   avatarUrl: string | null
+  /** Từ API bạn bè; client cũ có thể thiếu. */
+  bio?: string | null
 }
 
 export type RelationshipStatus =

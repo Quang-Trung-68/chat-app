@@ -91,3 +91,32 @@ export async function markRoomRead(req: Request, res: Response, next: NextFuncti
     next(e)
   }
 }
+
+export async function transferGroupOwner(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user!.id
+    const idParsed = z.string().cuid().safeParse(req.params.id)
+    if (!idParsed.success) {
+      return next(new AppError('ID room không hợp lệ', 400, 'VALIDATION_ERROR'))
+    }
+    const { newOwnerId } = req.body as { newOwnerId: string }
+    await roomsService.transferGroupOwner(userId, idParsed.data, newOwnerId)
+    res.json({ success: true, data: { ok: true } })
+  } catch (e) {
+    next(e)
+  }
+}
+
+export async function disbandGroup(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user!.id
+    const idParsed = z.string().cuid().safeParse(req.params.id)
+    if (!idParsed.success) {
+      return next(new AppError('ID room không hợp lệ', 400, 'VALIDATION_ERROR'))
+    }
+    await roomsService.disbandGroup(userId, idParsed.data)
+    res.json({ success: true, data: { ok: true } })
+  } catch (e) {
+    next(e)
+  }
+}

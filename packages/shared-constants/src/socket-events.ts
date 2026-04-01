@@ -13,6 +13,8 @@ export const SOCKET_EVENTS = {
   TYPING_STOP: 'typing:stop',
   PRESENCE_ONLINE: 'presence:online',
   PRESENCE_OFFLINE: 'presence:offline',
+  /** Server → socket vừa kết nối: hydrate ai đang online (Redis/memory), tránh lỡ sự kiện trước đó. */
+  PRESENCE_SYNC: 'presence:sync',
   /** Client → server: đánh dấu đã đọc tới hiện tại trong room. */
   ROOM_READ: 'room:read',
   /** Server → room: ai đó vừa cập nhật lastReadAt (tick / refresh unread). */
@@ -29,6 +31,11 @@ export const SOCKET_EVENTS = {
   CALL_SIGNAL: 'call:signal',
   /** Kết thúc / từ chối cuộc gọi thoại. */
   CALL_END: 'call:end',
+  /**
+   * Server → user:{userId}: danh sách phòng cần đồng bộ (tạo nhóm / membership).
+   * Client invalidate GET /rooms; `sidebarHint` chỉ cho người được thêm (không phải người tạo).
+   */
+  ROOM_LIST_UPDATED: 'room:list:updated',
 } as const
 
 export type SocketEventKey = keyof typeof SOCKET_EVENTS

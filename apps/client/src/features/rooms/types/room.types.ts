@@ -9,6 +9,8 @@ export interface RoomListItem {
     username: string
     displayName?: string
     avatarUrl: string | null
+    /** Nhóm: OWNER = quản trị viên (người tạo nhóm). */
+    role?: 'OWNER' | 'MEMBER'
   }[]
   lastMessage: {
     id: string

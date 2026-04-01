@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '@/features/auth/hooks/useAuth'
 import { useRoomsQuery } from '@/features/rooms/queries/rooms.queries'
 import { ChatNavRail } from '../components/ChatNavRail'
@@ -11,6 +11,7 @@ import { useActiveConversationStore } from '../store/activeConversation.store'
 import { useContactsPendingBadge } from '@/features/contacts/hooks/useContactsPendingBadge'
 import { MobileBottomNav, mobileNavBottomPaddingClassName } from '@/shared/components/MobileBottomNav'
 import { cn } from '@/lib/utils'
+import { useRoomSidebarHintsStore } from '@/features/rooms/store/roomSidebarHints.store'
 
 function useDesktopLgMatches() {
   const [matches, setMatches] = useState(() =>
@@ -28,6 +29,7 @@ function useDesktopLgMatches() {
 
 export function ChatPage() {
   const { conversationId } = useParams<{ conversationId: string }>()
+  const navigate = useNavigate()
   const setActiveConversationId = useActiveConversationStore((s) => s.setActiveConversationId)
 
   useEffect(() => {
@@ -36,8 +38,25 @@ export function ChatPage() {
   }, [conversationId, setActiveConversationId])
   const { user, logout } = useAuth()
   const contactsPendingBadge = useContactsPendingBadge()
-  const { data: rooms } = useRoomsQuery()
+  const { data: rooms, isFetching: roomsFetching } = useRoomsQuery()
+  const clearRoomSidebarHint = useRoomSidebarHintsStore((s) => s.clearHint)
   const isLgUp = useDesktopLgMatches()
+
+  useEffect(() => {
+    if (!conversationId) return
+    clearRoomSidebarHint(conversationId)
+  }, [conversationId, clearRoomSidebarHint])
+
+  /** Room bị giải tán / mất quyền: đẩy về trang chủ chat (chờ refetch xong để không lỗi khi vừa tạo nhóm). */
+  useEffect(() => {
+    if (!conversationId) return
+    if (rooms === undefined) return
+    if (roomsFetching) return
+    const stillInList = rooms.some((r) => r.id === conversationId)
+    if (!stillInList) {
+      navigate('/chat', { replace: true })
+    }
+  }, [conversationId, rooms, roomsFetching, navigate])
   const [rightOpen, setRightOpen] = useState(() =>
     typeof window !== 'undefined' ? window.matchMedia('(min-width: 1024px)').matches : true
   )

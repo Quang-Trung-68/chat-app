@@ -4,15 +4,20 @@ import { useAuthStore } from '@/features/auth/store/auth.store'
 import { roomsKeys } from '../rooms.keys'
 import type { RoomListItem } from '../types/room.types'
 
-type ParticipantRow = RoomListItem['participants'][number] & { display_name?: string | null }
+type ParticipantRow = RoomListItem['participants'][number] & {
+  display_name?: string | null
+  role?: 'OWNER' | 'MEMBER'
+}
 
 function normalizeParticipant(p: ParticipantRow): RoomListItem['participants'][number] {
   const d = (p.displayName ?? p.display_name)?.trim()
+  const role = p.role as RoomListItem['participants'][number]['role'] | undefined
   return {
     id: p.id,
     username: p.username,
     ...(d ? { displayName: d } : {}),
     avatarUrl: p.avatarUrl ?? null,
+    ...(role ? { role } : {}),
   }
 }
 

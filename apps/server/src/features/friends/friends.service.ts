@@ -13,6 +13,7 @@ const userPublic = {
   username: true,
   displayName: true,
   avatarUrl: true,
+  bio: true,
 } as const
 
 function label(u: { displayName: string; username: string }): string {
@@ -344,6 +345,7 @@ export const friendsService = {
         username: string
         displayName: string
         avatarUrl: string | null
+        bio: string | null
       }
       dmConversationId: string | null
     }[] = []

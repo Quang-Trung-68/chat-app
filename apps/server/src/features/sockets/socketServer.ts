@@ -1,4 +1,5 @@
 import { Server } from 'socket.io'
+import { SOCKET_EVENTS } from '@chat-app/shared-constants'
 import type { Server as HttpServer } from 'http'
 import { env } from '@/config/env'
 import { registerSocketAuthMiddleware } from './socketAuth.middleware'
@@ -12,6 +13,7 @@ import {
 import { registerRoomReadHandlers } from './roomRead.handlers'
 import { registerConversationJoinHandlers } from './conversationJoin.handlers'
 import { registerCallHandlers } from './callHandlers'
+import { getPresenceOnlineUserIds } from '@/config/redis'
 import { attachRedisAdapter } from './setupRedisAdapter'
 import './socket.types'
 
@@ -57,6 +59,13 @@ export function initSocketServer(httpServer: HttpServer) {
       console.error('[Socket] presence connect failed', e)
       socket.disconnect(true)
       return
+    }
+
+    try {
+      const onlineUserIds = await getPresenceOnlineUserIds()
+      socket.emit(SOCKET_EVENTS.PRESENCE_SYNC, { userIds: onlineUserIds })
+    } catch (e) {
+      console.error('[Socket] presence sync failed', e)
     }
 
     registerChatSocketHandlers(io, socket)

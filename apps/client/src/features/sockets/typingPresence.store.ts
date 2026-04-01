@@ -7,6 +7,8 @@ type TypingPresenceState = {
   typingByConversation: Record<string, string[]>
   setPresenceOnline: (userId: string) => void
   setPresenceOffline: (userId: string) => void
+  /** Thay thế map online theo snapshot server (sau socket connect / reconnect). */
+  syncPresenceOnline: (userIds: string[]) => void
   addTyping: (conversationId: string, userId: string) => void
   removeTyping: (conversationId: string, userId: string) => void
   reset: () => void
@@ -29,6 +31,10 @@ export const useTypingPresenceStore = create<TypingPresenceState>((set) => ({
       const next = { ...s.presenceOnline }
       delete next[userId]
       return { presenceOnline: next }
+    }),
+  syncPresenceOnline: (userIds) =>
+    set({
+      presenceOnline: Object.fromEntries(userIds.map((id) => [id, true as const])),
     }),
   addTyping: (conversationId, userId) =>
     set((s) => {

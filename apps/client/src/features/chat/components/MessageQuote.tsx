@@ -4,6 +4,8 @@ import { cn } from '@/lib/utils'
 type MessageQuoteProps = {
   preview: ParentMessagePreviewDto
   mine: boolean
+  /** DM: ẩn tên người gửi (chỉ hiển thị nội dung / ảnh thu nhỏ). */
+  hideSenderName?: boolean
   onNavigate?: () => void
   className?: string
 }
@@ -13,9 +15,17 @@ function senderLabel(p: ParentMessagePreviewDto): string {
   return d && d.length > 0 ? d : p.sender.username
 }
 
-export function MessageQuote({ preview, mine, onNavigate, className }: MessageQuoteProps) {
+export function MessageQuote({
+  preview,
+  mine,
+  hideSenderName,
+  onNavigate,
+  className,
+}: MessageQuoteProps) {
   const canNavigate = !preview.isDeleted && Boolean(onNavigate)
   const showThumb = Boolean(preview.firstAttachmentUrl) && !preview.isDeleted
+  const showNameRow =
+    preview.isDeleted || !hideSenderName
 
   const inner = (
     <div
@@ -37,18 +47,21 @@ export function MessageQuote({ preview, mine, onNavigate, className }: MessageQu
         </div>
       ) : null}
       <div className="min-w-0 flex-1">
-        <p
-          className={cn(
-            'truncate font-medium leading-tight',
-            mine ? 'text-white font-semibold' : 'text-foreground'
-          )}
-        >
-          {preview.isDeleted ? 'Tin nhắn đã bị xóa' : senderLabel(preview)}
-        </p>
+        {showNameRow ? (
+          <p
+            className={cn(
+              'truncate font-medium leading-tight',
+              mine ? 'text-white font-semibold' : 'text-foreground'
+            )}
+          >
+            {preview.isDeleted ? 'Tin nhắn đã bị xóa' : senderLabel(preview)}
+          </p>
+        ) : null}
         {!preview.isDeleted ? (
           <p
             className={cn(
-              'mt-0.5 line-clamp-2 wrap-break-word leading-snug',
+              'line-clamp-2 wrap-break-word leading-snug',
+              showNameRow ? 'mt-0.5' : '',
               mine ? 'text-white/85' : 'text-muted-foreground'
             )}
           >

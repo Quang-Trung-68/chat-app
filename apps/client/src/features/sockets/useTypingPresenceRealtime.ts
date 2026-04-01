@@ -5,6 +5,7 @@ import { useTypingPresenceStore } from './typingPresence.store'
 
 type TypingPayload = { conversationId: string; userId: string }
 type PresencePayload = { userId: string }
+type PresenceSyncPayload = { userIds: string[] }
 
 /**
  * Lắng nghe typing + presence; cập nhật Zustand; DEV log để verify Bước 8.
@@ -12,6 +13,7 @@ type PresencePayload = { userId: string }
 export function useTypingPresenceRealtime(socket: Socket | null, connected: boolean) {
   const setPresenceOnline = useTypingPresenceStore((s) => s.setPresenceOnline)
   const setPresenceOffline = useTypingPresenceStore((s) => s.setPresenceOffline)
+  const syncPresenceOnline = useTypingPresenceStore((s) => s.syncPresenceOnline)
   const addTyping = useTypingPresenceStore((s) => s.addTyping)
   const removeTyping = useTypingPresenceStore((s) => s.removeTyping)
 
@@ -50,16 +52,26 @@ export function useTypingPresenceRealtime(socket: Socket | null, connected: bool
       }
     }
 
+    const onPresenceSync = (p: PresenceSyncPayload) => {
+      const ids = Array.isArray(p?.userIds) ? p.userIds.filter((id): id is string => typeof id === 'string') : []
+      syncPresenceOnline(ids)
+      if (import.meta.env.DEV) {
+        console.log('[Socket] presence:sync', ids.length, 'user(s)')
+      }
+    }
+
     socket.on(SOCKET_EVENTS.TYPING_START, onTypingStart)
     socket.on(SOCKET_EVENTS.TYPING_STOP, onTypingStop)
     socket.on(SOCKET_EVENTS.PRESENCE_ONLINE, onPresenceOnline)
     socket.on(SOCKET_EVENTS.PRESENCE_OFFLINE, onPresenceOffline)
+    socket.on(SOCKET_EVENTS.PRESENCE_SYNC, onPresenceSync)
 
     return () => {
       socket.off(SOCKET_EVENTS.TYPING_START, onTypingStart)
       socket.off(SOCKET_EVENTS.TYPING_STOP, onTypingStop)
       socket.off(SOCKET_EVENTS.PRESENCE_ONLINE, onPresenceOnline)
       socket.off(SOCKET_EVENTS.PRESENCE_OFFLINE, onPresenceOffline)
+      socket.off(SOCKET_EVENTS.PRESENCE_SYNC, onPresenceSync)
     }
   }, [
     socket,
@@ -68,5 +80,6 @@ export function useTypingPresenceRealtime(socket: Socket | null, connected: bool
     removeTyping,
     setPresenceOnline,
     setPresenceOffline,
+    syncPresenceOnline,
   ])
 }

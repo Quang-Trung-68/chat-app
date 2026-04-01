@@ -7,6 +7,9 @@ let cacheRedis: Redis | null = null
 let pubClient: Redis | null = null
 let subClient: Redis | null = null
 
+/** Khớp `typingPresence.handlers` — key bộ đếm socket/tab. */
+const PRESENCE_USER_KEY_PREFIX = 'presence:user:'
+
 /** Fallback in-memory khi Redis không chạy (chỉ dev). */
 let memoryCache: InMemoryRedisLike | null = null
 
@@ -85,6 +88,17 @@ class InMemoryRedisLike implements RedisCacheLike {
     }
     this.counters.set(key, next)
     return next
+  }
+
+  /** UserId có ít nhất một kết nối (counter > 0). */
+  async getPresenceOnlineUserIds(): Promise<string[]> {
+    const out: string[] = []
+    for (const [key, n] of this.counters) {
+      if (n > 0 && key.startsWith(PRESENCE_USER_KEY_PREFIX)) {
+        out.push(key.slice(PRESENCE_USER_KEY_PREFIX.length))
+      }
+    }
+    return out
   }
 }
 
@@ -179,6 +193,28 @@ export function getRedisCache(): Redis | RedisCacheLike {
     throw new Error('Redis chưa được khởi tạo — gọi initRedis() trước')
   }
   return cacheRedis
+}
+
+/**
+ * Danh sách userId đang có ít nhất một socket (theo Redis/memory).
+ * Dùng để đồng bộ client ngay sau khi connect — không chỉ dựa vào `presence:online` lúc người khác mới vào.
+ */
+export async function getPresenceOnlineUserIds(): Promise<string[]> {
+  if (memoryCache) {
+    return memoryCache.getPresenceOnlineUserIds()
+  }
+  if (!cacheRedis) {
+    throw new Error('Redis chưa được khởi tạo — gọi initRedis() trước')
+  }
+  const keys = await cacheRedis.keys(`${PRESENCE_USER_KEY_PREFIX}*`)
+  const out: string[] = []
+  for (const key of keys) {
+    const v = await cacheRedis.get(key)
+    if (v !== null && parseInt(v, 10) > 0) {
+      out.push(key.slice(PRESENCE_USER_KEY_PREFIX.length))
+    }
+  }
+  return out
 }
 
 export function getRedisAdapterClients(): { pubClient: Redis; subClient: Redis } {

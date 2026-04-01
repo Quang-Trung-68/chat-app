@@ -1,6 +1,27 @@
 import { useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import {
+  Bell,
+  ChevronRight,
+  EyeOff,
+  Flag,
+  FolderInput,
+  Mail,
+  MessageSquareDot,
+  MoreHorizontal,
+  Pin,
+  Trash2,
+} from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 import type { RoomListItem } from '@/features/rooms/types/room.types'
 import { getRoomTitle } from '../utils/roomTitle'
@@ -14,6 +35,11 @@ import { userDisplayName } from '@/lib/userDisplay'
 import { useTypingPresenceStore } from '@/features/sockets/typingPresence.store'
 import { useMessageSearch } from '@/features/messages/hooks/useMessageSearch'
 import { SEARCH_MESSAGES } from '@chat-app/shared-constants'
+import { useRoomSidebarHintsStore } from '@/features/rooms/store/roomSidebarHints.store'
+import { roomsKeys } from '@/features/rooms/rooms.keys'
+import { disbandGroup } from '@/features/rooms/api/rooms.api'
+import { DisbandGroupConfirmDialog } from './DisbandGroupConfirmDialog'
+import { OnlinePresenceDot } from './OnlinePresenceDot'
 
 type ChatRoomListProps = {
   rooms: RoomListItem[] | undefined
@@ -21,10 +47,128 @@ type ChatRoomListProps = {
   className?: string
 }
 
+function RoomRowMoreMenu({
+  room,
+  currentUserId,
+  onRequestDisband,
+  disbandPending,
+}: {
+  room: RoomListItem
+  currentUserId: string | undefined
+  onRequestDisband?: () => void
+  disbandPending?: boolean
+}) {
+  const isGroupOwner =
+    room.type === 'GROUP' &&
+    Boolean(currentUserId && room.participants.some((p) => p.id === currentUserId && p.role === 'OWNER'))
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 shrink-0 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+          aria-label="Thêm"
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <MoreHorizontal className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        sideOffset={4}
+        className="min-w-56"
+        onClick={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
+      >
+        <DropdownMenuItem disabled onSelect={(e) => e.preventDefault()}>
+          <Pin className="h-4 w-4" />
+          Ghim hội thoại
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          disabled
+          className="justify-between opacity-80"
+          onSelect={(e) => e.preventDefault()}
+        >
+          <span className="flex items-center gap-2">
+            <FolderInput className="h-4 w-4" />
+            Phân loại
+          </span>
+          <ChevronRight className="h-4 w-4 shrink-0 opacity-50" />
+        </DropdownMenuItem>
+        <DropdownMenuItem disabled onSelect={(e) => e.preventDefault()}>
+          <Mail className="h-4 w-4" />
+          Đánh dấu chưa đọc
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem disabled onSelect={(e) => e.preventDefault()}>
+          <Bell className="h-4 w-4" />
+          Bật thông báo
+        </DropdownMenuItem>
+        <DropdownMenuItem disabled onSelect={(e) => e.preventDefault()}>
+          <EyeOff className="h-4 w-4" />
+          Ẩn trò chuyện
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          disabled
+          className="justify-between text-muted-foreground opacity-70"
+          onSelect={(e) => e.preventDefault()}
+        >
+          <span className="flex items-center gap-2">
+            <MessageSquareDot className="h-4 w-4" />
+            Tin nhắn tự xóa
+          </span>
+          <ChevronRight className="h-4 w-4 shrink-0 opacity-50" />
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem className="text-destructive focus:bg-destructive/10 focus:text-destructive">
+          <Trash2 className="h-4 w-4" />
+          Xóa hội thoại
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem disabled onSelect={(e) => e.preventDefault()}>
+          <Flag className="h-4 w-4" />
+          Báo xấu
+        </DropdownMenuItem>
+        {isGroupOwner ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+              disabled={disbandPending}
+              onSelect={() => onRequestDisband?.()}
+            >
+              <Trash2 className="h-4 w-4" />
+              Giải tán nhóm
+            </DropdownMenuItem>
+          </>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 export function ChatRoomList({ rooms, currentUserId, className }: ChatRoomListProps) {
   const { conversationId } = useParams()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const [disbandRoom, setDisbandRoom] = useState<RoomListItem | null>(null)
+
+  const disbandMut = useMutation({
+    mutationFn: (id: string) => disbandGroup(id),
+    onSuccess: (_, id) => {
+      void queryClient.invalidateQueries({ queryKey: roomsKeys.all })
+      setDisbandRoom(null)
+      if (conversationId === id) navigate('/chat')
+    },
+  })
+
   useMinuteTicker()
+  const sidebarHints = useRoomSidebarHintsStore((s) => s.hints)
   const typingByConversation = useTypingPresenceStore((s) => s.typingByConversation)
+  const presenceOnline = useTypingPresenceStore((s) => s.presenceOnline)
   const [q, setQ] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
   const [searchScopeTab, setSearchScopeTab] = useState<SearchScopeTab>('all')
@@ -79,6 +223,16 @@ export function ChatRoomList({ rooms, currentUserId, className }: ChatRoomListPr
         className
       )}
     >
+      <DisbandGroupConfirmDialog
+        open={disbandRoom !== null}
+        onOpenChange={(o) => {
+          if (!o) setDisbandRoom(null)
+        }}
+        onConfirm={() => {
+          if (disbandRoom) disbandMut.mutate(disbandRoom.id)
+        }}
+        isPending={disbandMut.isPending}
+      />
       <ChatGlobalSearchToolbar
         q={q}
         onQChange={setQ}
@@ -154,30 +308,38 @@ export function ChatRoomList({ rooms, currentUserId, className }: ChatRoomListPr
                 room.type === 'GROUP' && last && sender
                   ? `${userDisplayName(sender)}: ${previewBase}`
                   : previewBase
-              const preview = typingLine ?? previewPlain
+              const sidebarHint = sidebarHints[room.id]
+              const previewPrimary = typingLine ?? (sidebarHint ?? previewPlain)
+              const isSidebarHint = Boolean(sidebarHint && !typingLine)
               const time = last ? formatSidebarTime(last.createdAt) : ''
               const unreadHighlight = room.unreadCount > 0 && !active
               const initial = title.slice(0, 1).toUpperCase()
               const other = room.participants.find((p) => p.id !== currentUserId)
               const av = room.type === 'GROUP' ? null : other?.avatarUrl
+              const peerOnline =
+                room.type === 'DM' && other ? Boolean(presenceOnline[other.id]) : false
 
               return (
-                <li key={room.id}>
+                <li
+                  key={room.id}
+                  className={cn(
+                    'group flex items-stretch transition-colors',
+                    active ? 'bg-[#e5f0ff]' : 'hover:bg-[#f0f4ff]'
+                  )}
+                >
                   <Link
                     to={`/chat/${room.id}`}
-                    className={cn(
-                      'flex gap-2.5 px-3 py-2 transition-colors',
-                      active
-                        ? 'bg-[#e5f0ff]'
-                        : 'hover:bg-[#f0f4ff]'
-                    )}
+                    className="flex min-w-0 flex-1 gap-2.5 px-3 py-2"
                   >
-                    <Avatar className="h-11 w-11 shrink-0">
-                      {av ? <AvatarImage src={av} alt="" /> : null}
-                      <AvatarFallback className="bg-[#0068ff]/15 text-sm font-medium text-[#0068ff]">
-                        {initial}
-                      </AvatarFallback>
-                    </Avatar>
+                    <div className="relative h-11 w-11 shrink-0">
+                      <Avatar className="h-11 w-11">
+                        {av ? <AvatarImage src={av} alt="" /> : null}
+                        <AvatarFallback className="bg-[#0068ff]/15 text-sm font-medium text-[#0068ff]">
+                          {initial}
+                        </AvatarFallback>
+                      </Avatar>
+                      <OnlinePresenceDot show={peerOnline} />
+                    </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-start justify-between gap-2">
                         <span
@@ -198,11 +360,13 @@ export function ChatRoomList({ rooms, currentUserId, className }: ChatRoomListPr
                         <p
                           className={cn(
                             'min-w-0 flex-1 truncate text-xs',
-                            unreadHighlight ? 'font-semibold text-foreground' : 'text-muted-foreground',
-                            typingLine && 'italic text-[#0068ff]'
+                            isSidebarHint && 'text-[11px] font-medium leading-snug text-red-600',
+                            !isSidebarHint && unreadHighlight && 'font-semibold text-foreground',
+                            !isSidebarHint && !unreadHighlight && 'text-muted-foreground',
+                            !isSidebarHint && typingLine && 'italic text-[#0068ff]'
                           )}
                         >
-                          {preview}
+                          {previewPrimary}
                         </p>
                         {room.unreadCount > 0 && !active ? (
                           <span className="flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold leading-none text-white">
@@ -212,6 +376,22 @@ export function ChatRoomList({ rooms, currentUserId, className }: ChatRoomListPr
                       </div>
                     </div>
                   </Link>
+                  <div
+                    className={cn(
+                      'flex shrink-0 items-center self-center pr-2',
+                      'opacity-0 transition-opacity group-hover:opacity-100',
+                      active && 'opacity-100'
+                    )}
+                    onClick={(e) => e.stopPropagation()}
+                    onPointerDown={(e) => e.stopPropagation()}
+                  >
+                    <RoomRowMoreMenu
+                      room={room}
+                      currentUserId={currentUserId}
+                      disbandPending={Boolean(disbandMut.isPending && disbandRoom?.id === room.id)}
+                      onRequestDisband={() => setDisbandRoom(room)}
+                    />
+                  </div>
                 </li>
               )
             })}

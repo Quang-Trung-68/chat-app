@@ -4,7 +4,17 @@ import type { InfiniteData } from '@tanstack/react-query'
 import { useQueryClient } from '@tanstack/react-query'
 import { usePendingImageUploadsStore } from '@/features/messages/store/pendingImageUploads.store'
 import { MAX_PINS_PER_CONVERSATION } from '@chat-app/shared-constants'
-import { ChevronDown, ChevronLeft, Loader2, PanelRight, Phone, Pin, Search, Video } from 'lucide-react'
+import {
+  ChevronDown,
+  ChevronLeft,
+  Crown,
+  Loader2,
+  PanelRight,
+  Phone,
+  Pin,
+  Search,
+  Video,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -28,6 +38,7 @@ import { MessageImageGrid } from './MessageImageGrid'
 import { MessageQuote } from './MessageQuote'
 import { MessageBubbleActions } from './MessageBubbleActions'
 import { MessageReactionHoverLayer } from './MessageReactions'
+import { OnlinePresenceDot } from './OnlinePresenceDot'
 import { useRealtimeMessagesStore } from '@/features/messages/store/realtimeMessages.store'
 import { cn } from '@/lib/utils'
 import { EMPTY_STRING_ARRAY } from '@/lib/zustandEmpty'
@@ -101,6 +112,11 @@ export function ChatThread({
     return { id: p.id, displayName: userDisplayName(p), avatarUrl: p.avatarUrl }
   }, [room, currentUserId])
 
+  const groupOwnerId = useMemo(() => {
+    if (!room || room.type !== 'GROUP') return undefined
+    return room.participants.find((p) => p.role === 'OWNER')?.id
+  }, [room])
+
   const { iceServers, isLoading: turnLoading } = useTurnCredentials({
     enabled: Boolean(room?.type === 'DM' && conversationId),
   })
@@ -132,6 +148,8 @@ export function ChatThread({
     return list ?? EMPTY_STRING_ARRAY
   })
   const typingOthers = typingIds.filter((id) => id !== currentUserId)
+  const presenceOnline = useTypingPresenceStore((s) => s.presenceOnline)
+  const peerIsOnline = Boolean(room?.type === 'DM' && dmPeer && presenceOnline[dmPeer.id])
 
   const clearPendingForSyncedAttachments = usePendingImageUploadsStore((s) => s.clear)
   const pendingByMessageId = usePendingImageUploadsStore((s) => s.byMessageId)
@@ -524,23 +542,36 @@ export function ChatThread({
                 <ChevronLeft className="h-6 w-6" />
               </Link>
             </Button>
-            <Avatar className="h-9 w-9 shrink-0">
-              <AvatarFallback className="bg-[#0068ff]/15 text-sm font-medium text-[#0068ff]">
-                {title.slice(0, 1).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-            <div className="min-w-0">
-              <h2 className="truncate text-sm font-semibold text-foreground">{title}</h2>
-              {mentionLine ? (
-                <p className="truncate text-xs text-muted-foreground">{mentionLine}</p>
-              ) : room ? (
-                <p className="text-xs text-muted-foreground">
-                  {room.type === 'GROUP' ? `${room.participants.length} thành viên` : '1–1'}
-                </p>
-              ) : (
-                <p className="text-xs text-muted-foreground">…</p>
-              )}
+            <div className="relative h-9 w-9 shrink-0">
+              <Avatar className="h-9 w-9">
+                {room?.type === 'DM' && dmPeer?.avatarUrl ? (
+                  <AvatarImage src={dmPeer.avatarUrl} alt="" />
+                ) : null}
+                <AvatarFallback className="bg-[#0068ff]/15 text-sm font-medium text-[#0068ff]">
+                  {title.slice(0, 1).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <OnlinePresenceDot show={peerIsOnline} />
             </div>
+            <div className="flex gap-1 items-start">
+              <div className="min-w-0">
+                <h2 className="truncate text-sm font-semibold text-foreground">{title}</h2>
+                {mentionLine ? (
+                  <p className="truncate text-xs text-muted-foreground">{mentionLine}</p>
+                ) : room ? (
+                  <p className="text-xs text-muted-foreground">
+                    {room.type === 'GROUP' ? `${room.participants.length} thành viên` : '1–1'}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">…</p>
+                )}
+              </div>
+              {room?.type === 'DM' && peerIsOnline ? (
+                <span className="mt-0.5 inline-flex max-w-full items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-200/80">
+                  Đang hoạt động
+                </span>
+              ) : null}
+            </div >
           </div>
           <div className="flex shrink-0 items-center gap-0.5">
             <Button
@@ -665,7 +696,13 @@ export function ChatThread({
                     {g.items.map((m) => {
                       const mine = m.sender.id === currentUserId
                       const senderLabel = displayNameForMessageSender(m.sender, room?.participants)
+                      const isDm = room?.type === 'DM'
+                      const showSenderNameOnBubble = !mine && !isDm
                       const parentPreview = resolveParentPreview(m, merged)
+                      const isGroupAdminMessage =
+                        room?.type === 'GROUP' &&
+                        groupOwnerId !== undefined &&
+                        m.sender.id === groupOwnerId
                       return (
                         <li
                           key={m.id}
@@ -673,14 +710,25 @@ export function ChatThread({
                           className={cn('flex gap-2', mine ? 'flex-row-reverse' : 'flex-row')}
                         >
                           {!mine ? (
-                            <Avatar className="mt-0.5 h-8 w-8 shrink-0">
-                              {m.sender.avatarUrl ? (
-                                <AvatarImage src={m.sender.avatarUrl} alt="" />
+                            <div className="relative mt-0.5 h-8 w-8 shrink-0">
+                              <Avatar className="h-8 w-8">
+                                {m.sender.avatarUrl ? (
+                                  <AvatarImage src={m.sender.avatarUrl} alt="" />
+                                ) : null}
+                                <AvatarFallback className="text-[10px]">
+                                  {senderLabel.slice(0, 1).toUpperCase()}
+                                </AvatarFallback>
+                              </Avatar>
+                              {isGroupAdminMessage ? (
+                                <span
+                                  className="pointer-events-none absolute -right-0.5 -top-0.5 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-amber-400/70"
+                                  title="Quản trị viên"
+                                  aria-hidden
+                                >
+                                  <Crown className="h-[7px] w-[7px] text-amber-500" strokeWidth={2.75} />
+                                </span>
                               ) : null}
-                              <AvatarFallback className="text-[10px]">
-                                {senderLabel.slice(0, 1).toUpperCase()}
-                              </AvatarFallback>
-                            </Avatar>
+                            </div>
                           ) : (
                             <div className="w-8 shrink-0" />
                           )}
@@ -704,157 +752,155 @@ export function ChatThread({
                                   onUnpin={() => unpinMut.mutate(m.id)}
                                 />
                                 <div className="relative w-fit max-w-full min-w-0 pb-3">
-                            <div
-                              className={cn(
-                                'rounded-2xl px-3 py-2 text-sm',
-                                mine
-                                  ? 'rounded-br-sm bg-[#0068ff] text-white shadow-sm'
-                                  : 'rounded-bl-sm border-0 bg-white text-foreground shadow-sm'
-                              )}
-                            >
-                              {parentPreview ? (
-                                <div className={cn('mb-2', !mine && '-mx-0.5')}>
-                                  <MessageQuote
-                                    preview={parentPreview}
-                                    mine={mine}
-                                    onNavigate={
-                                      parentPreview.isDeleted
-                                        ? undefined
-                                        : () => void scrollToMessageInThread(parentPreview.id)
-                                    }
-                                  />
-                                </div>
-                              ) : null}
-                              {!mine ? (
-                                <p className="mb-1 text-xs font-medium text-[#0068ff]">{senderLabel}</p>
-                              ) : null}
-                              {m.content ? (
-                                <p className="whitespace-pre-wrap wrap-break-word">{m.content}</p>
-                              ) : null}
-                              {(() => {
-                                const pending = pendingByMessageId[m.id]
-                                const serverUrls = sortedAttachmentUrls(m)
-                                const legacySingle =
-                                  serverUrls.length === 0 &&
-                                    m.fileUrl &&
-                                    m.fileType === 'IMAGE'
-                                    ? [m.fileUrl]
-                                    : []
-                                const displayUrls =
-                                  serverUrls.length > 0
-                                    ? serverUrls
-                                    : legacySingle.length > 0
-                                      ? legacySingle
-                                      : (pending?.previewUrls ?? [])
-                                const imageLoading =
-                                  Boolean(pending?.previewUrls?.length) &&
-                                  serverUrls.length === 0 &&
-                                  legacySingle.length === 0
-                                if (displayUrls.length === 0 && !imageLoading) return null
-                                return (
-                                  <div className={cn(m.content ? 'mt-2' : '')}>
-                                    <MessageImageGrid
-                                      urls={displayUrls}
-                                      totalCount={displayUrls.length}
-                                      loading={imageLoading}
-                                      onPhotoClick={(idx) =>
-                                        setLightbox({
-                                          urls: displayUrls,
-                                          startIndex: Math.min(idx, displayUrls.length - 1),
-                                        })
-                                      }
-                                    />
+                                  <div
+                                    className={cn(
+                                      'rounded-2xl px-3 py-2 text-sm rounded-br-sm bg-[#0068ff] text-white shadow-sm',
+                                      isGroupAdminMessage && 'ring-2 ring-amber-400/35'
+                                    )}
+                                  >
+                                    {parentPreview ? (
+                                      <div className={cn('mb-2', !mine && '-mx-0.5')}>
+                                        <MessageQuote
+                                          preview={parentPreview}
+                                          mine={mine}
+                                          hideSenderName={isDm}
+                                          onNavigate={
+                                            parentPreview.isDeleted
+                                              ? undefined
+                                              : () => void scrollToMessageInThread(parentPreview.id)
+                                          }
+                                        />
+                                      </div>
+                                    ) : null}
+                                    {showSenderNameOnBubble ? (
+                                      <p className="mb-1 text-xs font-medium text-[#0068ff]">{senderLabel}</p>
+                                    ) : null}
+                                    {m.content ? (
+                                      <p className="whitespace-pre-wrap wrap-break-word">{m.content}</p>
+                                    ) : null}
+                                    {(() => {
+                                      const pending = pendingByMessageId[m.id]
+                                      const serverUrls = sortedAttachmentUrls(m)
+                                      const legacySingle =
+                                        serverUrls.length === 0 &&
+                                          m.fileUrl &&
+                                          m.fileType === 'IMAGE'
+                                          ? [m.fileUrl]
+                                          : []
+                                      const displayUrls =
+                                        serverUrls.length > 0
+                                          ? serverUrls
+                                          : legacySingle.length > 0
+                                            ? legacySingle
+                                            : (pending?.previewUrls ?? [])
+                                      const imageLoading =
+                                        Boolean(pending?.previewUrls?.length) &&
+                                        serverUrls.length === 0 &&
+                                        legacySingle.length === 0
+                                      if (displayUrls.length === 0 && !imageLoading) return null
+                                      return (
+                                        <div className={cn(m.content ? 'mt-2' : '')}>
+                                          <MessageImageGrid
+                                            urls={displayUrls}
+                                            totalCount={displayUrls.length}
+                                            loading={imageLoading}
+                                            onPhotoClick={(idx) =>
+                                              setLightbox({
+                                                urls: displayUrls,
+                                                startIndex: Math.min(idx, displayUrls.length - 1),
+                                              })
+                                            }
+                                          />
+                                        </div>
+                                      )
+                                    })()}
+                                    <div
+                                      className={cn(
+                                        'mt-1 text-[10px]',
+                                        mine ? 'text-white/70' : 'text-muted-foreground/80'
+                                      )}
+                                    >
+                                      <span>{formatMessageTime(m.createdAt)}</span>
+                                    </div>
                                   </div>
-                                )
-                              })()}
-                              <div
-                                className={cn(
-                                  'mt-1 text-[10px]',
-                                  mine ? 'text-white/70' : 'text-muted-foreground/80'
-                                )}
-                              >
-                                <span>{formatMessageTime(m.createdAt)}</span>
-                              </div>
-                            </div>
-                            <MessageReactionHoverLayer message={m} conversationId={conversationId} mine={mine} />
+                                  <MessageReactionHoverLayer message={m} conversationId={conversationId} mine={mine} />
                                 </div>
                               </>
                             ) : (
                               <>
                                 <div className="relative w-fit max-w-full min-w-0 pb-3">
-                            <div
-                              className={cn(
-                                'rounded-2xl px-3 py-2 text-sm',
-                                mine
-                                  ? 'rounded-br-sm bg-[#0068ff] text-white shadow-sm'
-                                  : 'rounded-bl-sm border-0 bg-white text-foreground shadow-sm'
-                              )}
-                            >
-                              {parentPreview ? (
-                                <div className={cn('mb-2', !mine && '-mx-0.5')}>
-                                  <MessageQuote
-                                    preview={parentPreview}
-                                    mine={mine}
-                                    onNavigate={
-                                      parentPreview.isDeleted
-                                        ? undefined
-                                        : () => void scrollToMessageInThread(parentPreview.id)
-                                    }
-                                  />
-                                </div>
-                              ) : null}
-                              {!mine ? (
-                                <p className="mb-1 text-xs font-medium text-[#0068ff]">{senderLabel}</p>
-                              ) : null}
-                              {m.content ? (
-                                <p className="whitespace-pre-wrap wrap-break-word">{m.content}</p>
-                              ) : null}
-                              {(() => {
-                                const pending = pendingByMessageId[m.id]
-                                const serverUrls = sortedAttachmentUrls(m)
-                                const legacySingle =
-                                  serverUrls.length === 0 &&
-                                    m.fileUrl &&
-                                    m.fileType === 'IMAGE'
-                                    ? [m.fileUrl]
-                                    : []
-                                const displayUrls =
-                                  serverUrls.length > 0
-                                    ? serverUrls
-                                    : legacySingle.length > 0
-                                      ? legacySingle
-                                      : (pending?.previewUrls ?? [])
-                                const imageLoading =
-                                  Boolean(pending?.previewUrls?.length) &&
-                                  serverUrls.length === 0 &&
-                                  legacySingle.length === 0
-                                if (displayUrls.length === 0 && !imageLoading) return null
-                                return (
-                                  <div className={cn(m.content ? 'mt-2' : '')}>
-                                    <MessageImageGrid
-                                      urls={displayUrls}
-                                      totalCount={displayUrls.length}
-                                      loading={imageLoading}
-                                      onPhotoClick={(idx) =>
-                                        setLightbox({
-                                          urls: displayUrls,
-                                          startIndex: Math.min(idx, displayUrls.length - 1),
-                                        })
-                                      }
-                                    />
+                                  <div
+                                    className={cn(
+                                      'rounded-2xl px-3 py-2 text-sm rounded-bl-sm border-0 bg-white text-foreground shadow-sm',
+                                      isGroupAdminMessage && 'ring-2 ring-amber-400/30'
+                                    )}
+                                  >
+                                    {parentPreview ? (
+                                      <div className={cn('mb-2', !mine && '-mx-0.5')}>
+                                        <MessageQuote
+                                          preview={parentPreview}
+                                          mine={mine}
+                                          hideSenderName={isDm}
+                                          onNavigate={
+                                            parentPreview.isDeleted
+                                              ? undefined
+                                              : () => void scrollToMessageInThread(parentPreview.id)
+                                          }
+                                        />
+                                      </div>
+                                    ) : null}
+                                    {showSenderNameOnBubble ? (
+                                      <p className="mb-1 text-xs font-medium text-[#0068ff]">{senderLabel}</p>
+                                    ) : null}
+                                    {m.content ? (
+                                      <p className="whitespace-pre-wrap wrap-break-word">{m.content}</p>
+                                    ) : null}
+                                    {(() => {
+                                      const pending = pendingByMessageId[m.id]
+                                      const serverUrls = sortedAttachmentUrls(m)
+                                      const legacySingle =
+                                        serverUrls.length === 0 &&
+                                          m.fileUrl &&
+                                          m.fileType === 'IMAGE'
+                                          ? [m.fileUrl]
+                                          : []
+                                      const displayUrls =
+                                        serverUrls.length > 0
+                                          ? serverUrls
+                                          : legacySingle.length > 0
+                                            ? legacySingle
+                                            : (pending?.previewUrls ?? [])
+                                      const imageLoading =
+                                        Boolean(pending?.previewUrls?.length) &&
+                                        serverUrls.length === 0 &&
+                                        legacySingle.length === 0
+                                      if (displayUrls.length === 0 && !imageLoading) return null
+                                      return (
+                                        <div className={cn(m.content ? 'mt-2' : '')}>
+                                          <MessageImageGrid
+                                            urls={displayUrls}
+                                            totalCount={displayUrls.length}
+                                            loading={imageLoading}
+                                            onPhotoClick={(idx) =>
+                                              setLightbox({
+                                                urls: displayUrls,
+                                                startIndex: Math.min(idx, displayUrls.length - 1),
+                                              })
+                                            }
+                                          />
+                                        </div>
+                                      )
+                                    })()}
+                                    <div
+                                      className={cn(
+                                        'mt-1 text-[10px]',
+                                        mine ? 'text-white/70' : 'text-muted-foreground/80'
+                                      )}
+                                    >
+                                      <span>{formatMessageTime(m.createdAt)}</span>
+                                    </div>
                                   </div>
-                                )
-                              })()}
-                              <div
-                                className={cn(
-                                  'mt-1 text-[10px]',
-                                  mine ? 'text-white/70' : 'text-muted-foreground/80'
-                                )}
-                              >
-                                <span>{formatMessageTime(m.createdAt)}</span>
-                              </div>
-                            </div>
-                            <MessageReactionHoverLayer message={m} conversationId={conversationId} mine={mine} />
+                                  <MessageReactionHoverLayer message={m} conversationId={conversationId} mine={mine} />
                                 </div>
                                 <MessageBubbleActions
                                   conversationId={conversationId}

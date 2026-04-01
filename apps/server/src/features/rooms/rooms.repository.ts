@@ -24,6 +24,7 @@ export const roomsRepository = {
       },
       select: {
         conversationId: true,
+        role: true,
         user: {
           select: {
             id: true,
@@ -248,6 +249,28 @@ export const roomsRepository = {
           },
         },
       },
+    })
+  },
+
+  listActiveParticipantUserIds(conversationId: string) {
+    return prisma.conversationParticipant
+      .findMany({
+        where: { conversationId, deletedAt: null },
+        select: { userId: true },
+      })
+      .then((rows) => rows.map((r) => r.userId))
+  },
+
+  disbandGroupSoftDelete(conversationId: string) {
+    return prisma.$transaction(async (tx) => {
+      await tx.conversation.update({
+        where: { id: conversationId },
+        data: { deletedAt: new Date() },
+      })
+      await tx.conversationParticipant.updateMany({
+        where: { conversationId, deletedAt: null },
+        data: { deletedAt: new Date() },
+      })
     })
   },
 }

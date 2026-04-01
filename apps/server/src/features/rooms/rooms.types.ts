@@ -5,6 +5,8 @@ export interface RoomParticipantDto {
   username: string
   displayName: string
   avatarUrl: string | null
+  /** Chỉ có trong danh sách phòng (nhóm). */
+  role?: 'OWNER' | 'MEMBER'
 }
 
 export interface LastMessageDto {
@@ -35,7 +37,7 @@ export interface CreatedRoomDto {
   name: string | null
   type: ConversationType
   createdAt: Date
-  participants: Array<RoomParticipantDto & { role: string }>
+  participants: RoomParticipantDto[]
 }
 
 export interface PinnedMessageItemDto {

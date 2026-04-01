@@ -31,3 +31,33 @@
     @apply rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800;
   }
 }
+
+/**
+ * Emoji picker: desktop/tablet ẩn cả thanh cuộn dọc và ngang (vẫn cuộn bằng bánh xe / trackpad).
+ * Mobile: chỉ cuộn dọc, ẩn cuộn ngang; thanh dọc hiển thị theo trình duyệt.
+ */
+@layer utilities {
+  .emoji-picker-scroll {
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  @media (min-width: 640px) {
+    .emoji-picker-scroll {
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+    .emoji-picker-scroll::-webkit-scrollbar {
+      display: none;
+      width: 0;
+      height: 0;
+    }
+  }
+
+  @media (max-width: 639px) {
+    .emoji-picker-scroll {
+      overflow-x: hidden;
+    }
+  }
+}

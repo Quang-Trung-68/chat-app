@@ -11,6 +11,10 @@ export const pinMessageSchema = z.object({
   messageId: z.string().cuid(),
 })
 
+export const transferGroupOwnerSchema = z.object({
+  newOwnerId: z.string().cuid(),
+})
+
 export const validate =
   (schema: ZodSchema) => (req: Request, _res: Response, next: NextFunction) => {
     const result = schema.safeParse(req.body)
