@@ -70,10 +70,12 @@ export function useChatRealtime(socket: Socket | null, connected: boolean) {
         const senderName =
           msg.sender.displayName?.trim() || msg.sender.username || 'Ai đó'
         const preview =
-          msg.content?.trim() ||
-          (msg.attachments?.length ? 'Ảnh' : '') ||
-          (msg.fileUrl ? 'Ảnh' : '') ||
-          'Tin nhắn'
+          msg.messageType === 'CALL'
+            ? 'Cuộc gọi'
+            : msg.content?.trim() ||
+              (msg.attachments?.length ? 'Ảnh' : '') ||
+              (msg.fileUrl ? 'Ảnh' : '') ||
+              'Tin nhắn'
         const short = preview.length > 28 ? `${preview.slice(0, 25)}…` : preview
         useTitleBarStore.getState().setFlashLine(`${TITLE_DOT} ${senderName}: ${short}`)
       }

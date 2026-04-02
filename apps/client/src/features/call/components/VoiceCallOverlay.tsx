@@ -1,9 +1,15 @@
 import type { LegacyRef, RefObject } from 'react'
-import { Loader2, Mic, MicOff, Phone, PhoneOff } from 'lucide-react'
+import { Mic, MicOff, Phone, PhoneOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import type { VoiceCallUiState } from '../types/voiceCall.types'
 import type { VoicePeerInfo } from '../hooks/useVoiceCall'
+
+const SF_CLOCK =
+  'ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", system-ui, sans-serif'
+
+/** Chu vi stroke path (r=46 trong viewBox 100x100). */
+const RING_C = 2 * Math.PI * 46
 
 type VoiceCallOverlayProps = {
   open: boolean
@@ -13,6 +19,8 @@ type VoiceCallOverlayProps = {
   isMuted: boolean
   /** MM:SS khi đang thoại */
   callDurationLabel: string | null
+  /** 0–1: vòng tròn chờ gọi (30s), chỉ outgoing */
+  outboundRingProgress: number
   remoteAudioRef: RefObject<HTMLAudioElement | null>
   onAccept: () => void
   onReject: () => void
@@ -28,6 +36,7 @@ export function VoiceCallOverlay({
   error,
   isMuted,
   callDurationLabel,
+  outboundRingProgress,
   remoteAudioRef,
   onAccept,
   onReject,
@@ -39,6 +48,9 @@ export function VoiceCallOverlay({
 
   const title = peer?.displayName ?? 'Cuộc gọi'
   const initial = title.slice(0, 1).toUpperCase()
+  const showOutboundRing =
+    uiState === 'outgoing_connecting' || uiState === 'outgoing_ringing'
+  const p = Math.min(1, Math.max(0, outboundRingProgress))
 
   return (
     <div
@@ -50,19 +62,49 @@ export function VoiceCallOverlay({
       <audio ref={remoteAudioRef as LegacyRef<HTMLAudioElement>} autoPlay className="sr-only" />
 
       <div className="flex max-w-sm flex-col items-center gap-6 text-center">
-        <Avatar className="h-24 w-24 border-2 border-white/20 shadow-lg">
-          {peer?.avatarUrl ? <AvatarImage src={peer.avatarUrl} alt="" /> : null}
-          <AvatarFallback className="bg-[#0068ff]/30 text-3xl font-semibold text-white">
-            {initial}
-          </AvatarFallback>
-        </Avatar>
+        <div className="relative flex h-[7.25rem] w-[7.25rem] shrink-0 items-center justify-center">
+          {showOutboundRing ? (
+            <svg
+              className="pointer-events-none absolute inset-0 h-full w-full -rotate-90"
+              viewBox="0 0 100 100"
+              aria-hidden
+            >
+              <circle
+                cx="50"
+                cy="50"
+                r="46"
+                fill="none"
+                stroke="rgba(255,255,255,0.22)"
+                strokeWidth="2.5"
+              />
+              <circle
+                cx="50"
+                cy="50"
+                r="46"
+                fill="none"
+                stroke="white"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeDasharray={RING_C}
+                strokeDashoffset={RING_C * (1 - p)}
+              />
+            </svg>
+          ) : null}
+          <Avatar className="relative z-[1] h-24 w-24 border-2 border-white/20 shadow-lg">
+            {peer?.avatarUrl ? <AvatarImage src={peer.avatarUrl} alt="" /> : null}
+            <AvatarFallback className="bg-[#0068ff]/30 text-3xl font-semibold text-white">
+              {initial}
+            </AvatarFallback>
+          </Avatar>
+        </div>
 
         <div>
           <h2 id="voice-call-title" className="text-xl font-semibold tracking-tight">
             {uiState === 'incoming' ? 'Cuộc gọi đến' : uiState === 'ended' ? 'Kết thúc cuộc gọi' : title}
           </h2>
           <p className="mt-1 text-sm text-white/75">
-            {uiState === 'outgoing' && 'Đang gọi…'}
+            {uiState === 'outgoing_connecting' && 'Đang kết nối…'}
+            {uiState === 'outgoing_ringing' && 'Đang đổ chuông…'}
             {uiState === 'incoming' && `${title} đang gọi bạn`}
             {uiState === 'connected' && 'Đang kết nối thoại'}
             {uiState === 'ended' && 'Cuộc gọi đã kết thúc'}
@@ -71,7 +113,10 @@ export function VoiceCallOverlay({
         </div>
 
         {uiState === 'connected' && callDurationLabel ? (
-          <p className="font-mono text-3xl font-bold tabular-nums tracking-tight text-white">
+          <p
+            className="text-lg font-medium tabular-nums tracking-tight text-emerald-400"
+            style={{ fontFamily: SF_CLOCK }}
+          >
             {callDurationLabel}
           </p>
         ) : null}
@@ -81,19 +126,16 @@ export function VoiceCallOverlay({
         ) : null}
 
         <div className="flex flex-wrap items-center justify-center gap-3">
-          {uiState === 'outgoing' ? (
-            <>
-              <Loader2 className="h-8 w-8 animate-spin text-white/80" aria-hidden />
-              <Button
-                type="button"
-                variant="destructive"
-                className="gap-2 rounded-full px-6"
-                onClick={onCancelOutgoing}
-              >
-                <PhoneOff className="h-4 w-4" />
-                Huỷ
-              </Button>
-            </>
+          {uiState === 'outgoing_connecting' || uiState === 'outgoing_ringing' ? (
+            <Button
+              type="button"
+              variant="destructive"
+              className="gap-2 rounded-full px-6"
+              onClick={onCancelOutgoing}
+            >
+              <PhoneOff className="h-4 w-4" />
+              Huỷ
+            </Button>
           ) : null}
 
           {uiState === 'incoming' ? (

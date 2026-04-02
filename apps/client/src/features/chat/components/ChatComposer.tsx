@@ -445,6 +445,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
                     size="icon"
                     className="h-8 w-8 text-muted-foreground hover:text-foreground"
                     onClick={() => fileInputRef.current?.click()}
+                    aria-label="Chọn ảnh đính kèm"
                   >
                     <Image className="h-4 w-4" />
                   </Button>
@@ -509,7 +510,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
               </div>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button type="button" variant="ghost" size="icon" disabled className="h-8 w-8">
+                  <Button type="button" variant="ghost" size="icon" disabled className="h-8 w-8" aria-label="Đính kèm tệp">
                     <Paperclip className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
@@ -521,7 +522,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
               value={text}
               onChange={(e) => setText(e.target.value)}
               placeholder={`Nhập @, tin nhắn tới ${roomTitle}`}
-              className="min-h-10 flex-1 rounded-full border-border/80 bg-[#f4f5f7] px-4 shadow-none"
+              className="min-h-10 flex-1 rounded-full border-border/80 bg-secondary-surface px-4 shadow-none"
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault()
@@ -537,7 +538,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
                       type="button"
                       size="sm"
                       className={cn(
-                        'h-9 shrink-0 rounded-full bg-[#0068ff] px-4 text-white hover:bg-[#0056d6]'
+                        'h-9 shrink-0 rounded-full bg-primary px-4 text-primary-foreground hover:bg-primary/90'
                       )}
                       disabled={!text.trim() && pending.length === 0}
                       onClick={() => void send()}
@@ -550,7 +551,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
               ) : (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button type="button" variant="ghost" size="icon" disabled className="h-9 w-9 shrink-0">
+                    <Button type="button" variant="ghost" size="icon" disabled className="h-9 w-9 shrink-0" aria-label="Gửi like">
                       <ThumbsUp className="h-5 w-5 text-muted-foreground" />
                     </Button>
                   </TooltipTrigger>

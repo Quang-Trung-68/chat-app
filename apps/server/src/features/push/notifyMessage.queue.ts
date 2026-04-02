@@ -7,6 +7,7 @@ export const NOTIFY_MESSAGE_JOB = 'notify:message'
 
 export const NOTIFY_FRIEND_REQUEST_JOB = 'notify:friend_request'
 export const NOTIFY_FRIEND_ACCEPTED_JOB = 'notify:friend_accepted'
+export const NOTIFY_MISSED_CALL_JOB = 'notify:missed_call'
 
 export type NotifyMessageJobPayload = {
   messageId: string
@@ -26,6 +27,12 @@ export type NotifyFriendAcceptedPayload = {
   conversationId: string | null
   title: string
   body: string
+}
+
+export type NotifyMissedCallPayload = {
+  conversationId: string
+  calleeUserId: string
+  callerDisplayLabel: string
 }
 
 let connection: IORedis | null = null
@@ -80,4 +87,12 @@ export async function enqueueNotifyFriendAcceptedJob(
   const q = getNotifyMessageQueue()
   if (!q) return
   await q.add(NOTIFY_FRIEND_ACCEPTED_JOB, payload, defaultJobOpts)
+}
+
+export async function enqueueNotifyMissedCallJob(
+  payload: NotifyMissedCallPayload
+): Promise<void> {
+  const q = getNotifyMessageQueue()
+  if (!q) return
+  await q.add(NOTIFY_MISSED_CALL_JOB, payload, defaultJobOpts)
 }

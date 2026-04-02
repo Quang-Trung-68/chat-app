@@ -36,6 +36,9 @@ export function GlobalIncomingCallBanner() {
       socket.emit(SOCKET_EVENTS.CALL_END, {
         callId: offer.callId,
         conversationId: offer.conversationId,
+        reason: 'decline',
+        wasAnswered: false,
+        initiatorId: offer.fromUserId,
       })
     }
     clearOffer()

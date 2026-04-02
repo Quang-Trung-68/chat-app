@@ -27,8 +27,21 @@ export interface ParentMessagePreviewDto {
   isDeleted: boolean
 }
 
+/** Khớp Prisma MessageType — mặc định TEXT khi API cũ không gửi. */
+export type MessageTypeDto = 'TEXT' | 'IMAGE' | 'FILE' | 'SYSTEM' | 'CALL'
+
+export type CallMessagePayloadDto = {
+  callId: string
+  callKind: 'audio' | 'video'
+  outcome: 'COMPLETED' | 'DECLINED' | 'CANCELLED' | 'MISSED' | 'FAILED'
+  durationSeconds: number | null
+  initiatorId: string
+}
+
 export interface MessageItemDto {
   id: string
+  messageType?: MessageTypeDto
+  callPayload?: CallMessagePayloadDto | null
   content: string | null
   fileUrl: string | null
   fileType: 'IMAGE' | 'VIDEO' | 'DOCUMENT' | 'AUDIO' | null

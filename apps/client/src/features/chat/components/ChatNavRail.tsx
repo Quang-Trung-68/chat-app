@@ -49,7 +49,7 @@ export function ChatNavRail({
       <div
         className={cn(
           'flex w-[60px] shrink-0 flex-col items-center gap-2 py-3 shadow-[2px_0_8px_-2px_rgba(0,0,0,0.08)]',
-          'bg-[#005ae0] text-white',
+          'bg-primary text-primary-foreground',
           className
         )}
       >
@@ -57,7 +57,7 @@ export function ChatNavRail({
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="relative shrink-0 cursor-pointer rounded-full outline-none ring-offset-2 ring-offset-[#005ae0] focus-visible:ring-2 focus-visible:ring-white/80"
+              className="relative shrink-0 cursor-pointer rounded-full outline-none ring-offset-2 ring-offset-primary focus-visible:ring-2 focus-visible:ring-white/80"
               aria-label="Menu tài khoản"
             >
               <Avatar className="h-10 w-10 border border-white/20">
@@ -67,7 +67,7 @@ export function ChatNavRail({
                 </AvatarFallback>
               </Avatar>
               <span
-                className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-[#005ae0] bg-emerald-500"
+                className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-primary bg-emerald-500"
                 aria-hidden
                 title="Trực tuyến"
               />
@@ -160,7 +160,7 @@ export function ChatNavRail({
                 <Link to="/contacts/friends" className="relative" aria-label="Danh bạ">
                   {contactsPendingBadge ? (
                     <span
-                      className="pointer-events-none absolute -left-0.5 -top-0.5 z-10 h-2 w-2 rounded-full bg-red-500 ring-2 ring-[#005ae0]"
+                      className="pointer-events-none absolute -left-0.5 -top-0.5 z-10 h-2 w-2 rounded-full bg-red-500 ring-2 ring-primary"
                       aria-hidden
                     />
                   ) : null}

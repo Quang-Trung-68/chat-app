@@ -20,6 +20,9 @@ type CallSignalPayload = {
 }
 
 type CallEndPayload = { callId: string; conversationId: string; fromUserId: string }
+type CallRingingPayload = { callId: string; conversationId: string }
+
+const OUTBOUND_MAX_MS = 30_000
 
 function sdpJson(d: RTCSessionDescriptionInit): string {
   return JSON.stringify({ type: d.type, sdp: d.sdp })
@@ -35,6 +38,13 @@ export function formatCallDuration(totalSeconds: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
+/** Hiển thị kiểu "0 phút 32 giây" (tiếng Việt). */
+export function formatCallDurationVerbose(totalSeconds: number): string {
+  const m = Math.floor(totalSeconds / 60)
+  const s = totalSeconds % 60
+  return `${m} phút ${s} giây`
+}
+
 export type UseVoiceCallArgs = {
   conversationId: string
   currentUserId: string | undefined
@@ -44,6 +54,8 @@ export type UseVoiceCallArgs = {
   iceServers: IceServer[] | undefined
   turnLoading: boolean
 }
+
+type EndReason = 'hangup' | 'decline' | 'cancel' | 'timeout' | 'failed'
 
 export function useVoiceCall({
   conversationId,
@@ -58,6 +70,8 @@ export function useVoiceCall({
   const [error, setError] = useState<string | null>(null)
   const [isMuted, setIsMuted] = useState(false)
   const [callSeconds, setCallSeconds] = useState(0)
+  /** 0–1: vòng tròn chờ gọi đi (30s). */
+  const [outboundRingProgress, setOutboundRingProgress] = useState(0)
 
   useCallAlertSounds(uiState)
 
@@ -68,14 +82,28 @@ export function useVoiceCall({
   const pcRef = useRef<RTCPeerConnection | null>(null)
   const localStreamRef = useRef<MediaStream | null>(null)
   const callIdRef = useRef<string | null>(null)
+  const callInitiatorIdRef = useRef<string | null>(null)
   const iceQueueRef = useRef<RTCIceCandidateInit[]>([])
   const pendingOfferRef = useRef<{ callId: string; sdp: string; fromUserId: string } | null>(null)
   const endCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const outboundTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const outboundRingStartRef = useRef<number | null>(null)
+  const uiStateRef = useRef<VoiceCallUiState>('idle')
+  const callSecondsRef = useRef(0)
 
   const conversationIdRef = useRef(conversationId)
   const currentUserIdRef = useRef(currentUserId)
   conversationIdRef.current = conversationId
   currentUserIdRef.current = currentUserId
+  uiStateRef.current = uiState
+  callSecondsRef.current = callSeconds
+
+  const clearOutboundTimer = useCallback(() => {
+    if (outboundTimerRef.current) {
+      clearTimeout(outboundTimerRef.current)
+      outboundTimerRef.current = null
+    }
+  }, [])
 
   const cleanupMedia = useCallback(() => {
     localStreamRef.current?.getTracks().forEach((t) => t.stop())
@@ -85,21 +113,40 @@ export function useVoiceCall({
     iceQueueRef.current = []
     pendingOfferRef.current = null
     callIdRef.current = null
+    callInitiatorIdRef.current = null
+    outboundRingStartRef.current = null
     if (remoteAudioRef.current) {
       remoteAudioRef.current.srcObject = null
     }
     setIsMuted(false)
   }, [])
 
-  const emitEnd = useCallback(
-    (callId: string) => {
+  const emitCallEnd = useCallback(
+    (
+      callId: string,
+      payload: {
+        reason: EndReason
+        wasAnswered: boolean
+        durationSeconds?: number
+      }
+    ) => {
       if (!socket || !socketConnected) return
-      socket.emit(SOCKET_EVENTS.CALL_END, { callId, conversationId: conversationIdRef.current })
+      const initiatorId = callInitiatorIdRef.current
+      if (!initiatorId) return
+      socket.emit(SOCKET_EVENTS.CALL_END, {
+        callId,
+        conversationId: conversationIdRef.current,
+        reason: payload.reason,
+        wasAnswered: payload.wasAnswered,
+        durationSeconds: payload.durationSeconds,
+        initiatorId,
+      })
     },
     [socket, socketConnected]
   )
 
   const resetIdle = useCallback(() => {
+    clearOutboundTimer()
     if (endCloseTimerRef.current) {
       clearTimeout(endCloseTimerRef.current)
       endCloseTimerRef.current = null
@@ -108,9 +155,11 @@ export function useVoiceCall({
     setUiState('idle')
     setError(null)
     setCallSeconds(0)
-  }, [cleanupMedia])
+    setOutboundRingProgress(0)
+  }, [cleanupMedia, clearOutboundTimer])
 
   const showCallEndedAndClose = useCallback(() => {
+    clearOutboundTimer()
     cleanupMedia()
     setUiState('ended')
     if (endCloseTimerRef.current) clearTimeout(endCloseTimerRef.current)
@@ -118,23 +167,29 @@ export function useVoiceCall({
       endCloseTimerRef.current = null
       resetIdle()
     }, 1500)
-  }, [cleanupMedia, resetIdle])
+  }, [cleanupMedia, clearOutboundTimer, resetIdle])
 
   const endCall = useCallback(() => {
     const id = callIdRef.current
-    if (id) emitEnd(id)
+    if (id) {
+      emitCallEnd(id, {
+        reason: 'hangup',
+        wasAnswered: true,
+        durationSeconds: callSecondsRef.current,
+      })
+    }
     const g = useIncomingCallStore.getState().offer
     if (g?.callId === id) useIncomingCallStore.getState().clearOffer()
     showCallEndedAndClose()
-  }, [emitEnd, showCallEndedAndClose])
+  }, [emitCallEnd, showCallEndedAndClose])
 
   const cancelOutgoing = useCallback(() => {
     const id = callIdRef.current
-    if (id) emitEnd(id)
+    if (id) emitCallEnd(id, { reason: 'cancel', wasAnswered: false })
     const g = useIncomingCallStore.getState().offer
     if (g?.callId === id) useIncomingCallStore.getState().clearOffer()
     resetIdle()
-  }, [emitEnd, resetIdle])
+  }, [emitCallEnd, resetIdle])
 
   const flushIceQueue = useCallback(async (pc: RTCPeerConnection) => {
     const q = iceQueueRef.current
@@ -170,11 +225,28 @@ export function useVoiceCall({
       sdp: globalOffer.sdp,
       fromUserId: globalOffer.fromUserId,
     }
+    callInitiatorIdRef.current = globalOffer.fromUserId
     const extra = useIncomingCallStore.getState().takeIceForCall(globalOffer.callId)
     for (const c of extra) iceQueueRef.current.push(c)
     useIncomingCallStore.getState().clearOffer()
     setUiState('incoming')
   }, [globalOffer, conversationId, currentUserId])
+
+  const startOutboundTimer = useCallback(
+    (callId: string) => {
+      clearOutboundTimer()
+      outboundTimerRef.current = window.setTimeout(() => {
+        outboundTimerRef.current = null
+        if (callIdRef.current !== callId) return
+        const st = uiStateRef.current
+        if (st === 'outgoing_connecting' || st === 'outgoing_ringing') {
+          emitCallEnd(callId, { reason: 'timeout', wasAnswered: false })
+          resetIdle()
+        }
+      }, OUTBOUND_MAX_MS)
+    },
+    [clearOutboundTimer, emitCallEnd, resetIdle]
+  )
 
   const startOutgoing = useCallback(async () => {
     if (!socket || !socketConnected || !currentUserId || !peer) return
@@ -185,6 +257,9 @@ export function useVoiceCall({
     setError(null)
     const callId = crypto.randomUUID()
     callIdRef.current = callId
+    callInitiatorIdRef.current = currentUserId
+    outboundRingStartRef.current = Date.now()
+    startOutboundTimer(callId)
 
     let stream: MediaStream
     try {
@@ -192,6 +267,9 @@ export function useVoiceCall({
     } catch {
       setError('Không thể truy cập micro. Kiểm tra quyền trình duyệt.')
       callIdRef.current = null
+      callInitiatorIdRef.current = null
+      outboundRingStartRef.current = null
+      clearOutboundTimer()
       return
     }
     localStreamRef.current = stream
@@ -220,15 +298,16 @@ export function useVoiceCall({
     try {
       const offer = await pc.createOffer()
       await pc.setLocalDescription(offer)
+      setUiState('outgoing_connecting')
       socket.emit(SOCKET_EVENTS.CALL_SIGNAL, {
         callId,
         conversationId,
         type: 'offer',
         payload: sdpJson(offer),
       })
-      setUiState('outgoing')
     } catch {
       setError('Không thể bắt đầu cuộc gọi.')
+      clearOutboundTimer()
       cleanupMedia()
       setUiState('idle')
     }
@@ -241,6 +320,8 @@ export function useVoiceCall({
     effectiveIce,
     conversationId,
     cleanupMedia,
+    clearOutboundTimer,
+    startOutboundTimer,
   ])
 
   const acceptIncoming = useCallback(async () => {
@@ -253,6 +334,7 @@ export function useVoiceCall({
     setError(null)
     const pendingCallId = pending.callId
     callIdRef.current = pendingCallId
+    callInitiatorIdRef.current = pending.fromUserId
     pendingOfferRef.current = null
 
     let stream: MediaStream
@@ -261,6 +343,7 @@ export function useVoiceCall({
     } catch {
       setError('Không thể truy cập micro.')
       callIdRef.current = null
+      callInitiatorIdRef.current = null
       return
     }
     localStreamRef.current = stream
@@ -297,10 +380,11 @@ export function useVoiceCall({
         type: 'answer',
         payload: sdpJson(answer),
       })
+      clearOutboundTimer()
       setUiState('connected')
     } catch {
       setError('Không thể trả lời cuộc gọi.')
-      emitEnd(pendingCallId)
+      emitCallEnd(pendingCallId, { reason: 'failed', wasAnswered: false })
       cleanupMedia()
       setUiState('idle')
     }
@@ -312,8 +396,9 @@ export function useVoiceCall({
     effectiveIce,
     conversationId,
     flushIceQueue,
-    emitEnd,
+    emitCallEnd,
     cleanupMedia,
+    clearOutboundTimer,
   ])
 
   const rejectIncoming = useCallback(() => {
@@ -321,9 +406,9 @@ export function useVoiceCall({
     pendingOfferRef.current = null
     const g = useIncomingCallStore.getState().offer
     if (g && p && g.callId === p.callId) useIncomingCallStore.getState().clearOffer()
-    if (p) emitEnd(p.callId)
+    if (p) emitCallEnd(p.callId, { reason: 'decline', wasAnswered: false })
     resetIdle()
-  }, [emitEnd, resetIdle])
+  }, [emitCallEnd, resetIdle])
 
   const toggleMute = useCallback(() => {
     const s = localStreamRef.current
@@ -362,6 +447,7 @@ export function useVoiceCall({
         try {
           await pc.setRemoteDescription(parseSdp(data.payload))
           await flushIceQueue(pc)
+          clearOutboundTimer()
           setUiState('connected')
         } catch {
           /* ignore */
@@ -383,6 +469,14 @@ export function useVoiceCall({
       }
     }
 
+    const onRinging = (data: CallRingingPayload) => {
+      if (data.conversationId !== conversationIdRef.current) return
+      if (data.callId !== callIdRef.current) return
+      if (uiStateRef.current === 'outgoing_connecting') {
+        setUiState('outgoing_ringing')
+      }
+    }
+
     const onEnd = (data: CallEndPayload) => {
       if (data.conversationId !== conversationIdRef.current) return
       const active = callIdRef.current
@@ -395,28 +489,72 @@ export function useVoiceCall({
     }
 
     socket.on(SOCKET_EVENTS.CALL_SIGNAL, onSignal)
+    socket.on(SOCKET_EVENTS.CALL_RINGING, onRinging)
     socket.on(SOCKET_EVENTS.CALL_END, onEnd)
     return () => {
       socket.off(SOCKET_EVENTS.CALL_SIGNAL, onSignal)
+      socket.off(SOCKET_EVENTS.CALL_RINGING, onRinging)
       socket.off(SOCKET_EVENTS.CALL_END, onEnd)
     }
-  }, [socket, flushIceQueue, showCallEndedAndClose])
+  }, [socket, flushIceQueue, showCallEndedAndClose, clearOutboundTimer])
+
+  useEffect(() => {
+    if (uiState !== 'outgoing_connecting' && uiState !== 'outgoing_ringing') {
+      setOutboundRingProgress(0)
+      return
+    }
+    const start = outboundRingStartRef.current
+    if (start === null) return
+    let raf = 0
+    const tick = () => {
+      const p = Math.min(1, (Date.now() - start) / OUTBOUND_MAX_MS)
+      setOutboundRingProgress(p)
+      if (p < 1) raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [uiState])
 
   useEffect(() => {
     return () => {
       const id = callIdRef.current
-      if (id && socket) {
-        socket.emit(SOCKET_EVENTS.CALL_END, {
-          callId: id,
-          conversationId: conversationIdRef.current,
-        })
+      const initiator = callInitiatorIdRef.current
+      const st = uiStateRef.current
+      if (id && socket && initiator) {
+        if (st === 'outgoing_connecting' || st === 'outgoing_ringing') {
+          socket.emit(SOCKET_EVENTS.CALL_END, {
+            callId: id,
+            conversationId: conversationIdRef.current,
+            reason: 'cancel',
+            wasAnswered: false,
+            initiatorId: initiator,
+          })
+        } else if (st === 'incoming') {
+          socket.emit(SOCKET_EVENTS.CALL_END, {
+            callId: id,
+            conversationId: conversationIdRef.current,
+            reason: 'decline',
+            wasAnswered: false,
+            initiatorId: initiator,
+          })
+        } else if (st === 'connected') {
+          socket.emit(SOCKET_EVENTS.CALL_END, {
+            callId: id,
+            conversationId: conversationIdRef.current,
+            reason: 'hangup',
+            wasAnswered: true,
+            durationSeconds: callSecondsRef.current,
+            initiatorId: initiator,
+          })
+        }
       }
       if (endCloseTimerRef.current) clearTimeout(endCloseTimerRef.current)
+      clearOutboundTimer()
       cleanupMedia()
       setUiState('idle')
       setError(null)
     }
-  }, [conversationId, socket, cleanupMedia])
+  }, [conversationId, socket, cleanupMedia, clearOutboundTimer])
 
   const callDurationLabel = uiState === 'connected' ? formatCallDuration(callSeconds) : null
 
@@ -425,6 +563,7 @@ export function useVoiceCall({
     error,
     isMuted,
     callDurationLabel,
+    outboundRingProgress,
     remoteAudioRef,
     startOutgoing,
     acceptIncoming,

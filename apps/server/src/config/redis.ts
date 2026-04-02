@@ -7,8 +7,10 @@ let cacheRedis: Redis | null = null
 let pubClient: Redis | null = null
 let subClient: Redis | null = null
 
-/** Khớp `typingPresence.handlers` — key bộ đếm socket/tab. */
-const PRESENCE_USER_KEY_PREFIX = 'presence:user:'
+/** Khớp `presence.util` — SET các socket.id đang mở. */
+const PRESENCE_SOCKETS_KEY_PREFIX = 'presence:sockets:'
+/** Legacy: bộ đếm string (INCR/DECR) — xóa khi khởi động / khi user connect. */
+const LEGACY_PRESENCE_COUNTER_PREFIX = 'presence:user:'
 
 /** Fallback in-memory khi Redis không chạy (chỉ dev). */
 let memoryCache: InMemoryRedisLike | null = null
@@ -29,20 +31,18 @@ export type RedisCacheLike = {
   setex(key: string, seconds: number, value: string): Promise<'OK'>
   get(key: string): Promise<string | null>
   del(...keys: string[]): Promise<number>
-  incr(key: string): Promise<number>
-  decr(key: string): Promise<number>
+  sadd(key: string, member: string): Promise<number>
+  srem(key: string, member: string): Promise<number>
+  scard(key: string): Promise<number>
 }
 
 class InMemoryRedisLike implements RedisCacheLike {
   private strings = new Map<string, string>()
-  private counters = new Map<string, number>()
+  /** Presence: SET socket.id theo user. */
+  private presenceSets = new Map<string, Set<string>>()
   private ttlTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
   async get(key: string): Promise<string | null> {
-    if (this.counters.has(key)) {
-      const n = this.counters.get(key)!
-      return n > 0 ? String(n) : null
-    }
     return this.strings.get(key) ?? null
   }
 
@@ -66,36 +66,46 @@ class InMemoryRedisLike implements RedisCacheLike {
         clearTimeout(timer)
         this.ttlTimers.delete(key)
       }
-      if (this.strings.delete(key) || this.counters.has(key)) {
-        this.counters.delete(key)
-        n++
+      let removed = false
+      if (this.presenceSets.has(key)) {
+        this.presenceSets.delete(key)
+        removed = true
       }
+      if (this.strings.delete(key)) removed = true
+      if (removed) n++
     }
     return n
   }
 
-  async incr(key: string): Promise<number> {
-    const next = (this.counters.get(key) ?? 0) + 1
-    this.counters.set(key, next)
-    return next
-  }
-
-  async decr(key: string): Promise<number> {
-    const next = (this.counters.get(key) ?? 0) - 1
-    if (next <= 0) {
-      this.counters.delete(key)
-      return next
+  async sadd(key: string, member: string): Promise<number> {
+    let set = this.presenceSets.get(key)
+    if (!set) {
+      set = new Set<string>()
+      this.presenceSets.set(key, set)
     }
-    this.counters.set(key, next)
-    return next
+    const before = set.size
+    set.add(member)
+    return set.size > before ? 1 : 0
   }
 
-  /** UserId có ít nhất một kết nối (counter > 0). */
+  async srem(key: string, member: string): Promise<number> {
+    const set = this.presenceSets.get(key)
+    if (!set) return 0
+    const ok = set.delete(member)
+    if (set.size === 0) this.presenceSets.delete(key)
+    return ok ? 1 : 0
+  }
+
+  async scard(key: string): Promise<number> {
+    return this.presenceSets.get(key)?.size ?? 0
+  }
+
+  /** UserId có ít nhất một socket trong SET. */
   async getPresenceOnlineUserIds(): Promise<string[]> {
     const out: string[] = []
-    for (const [key, n] of this.counters) {
-      if (n > 0 && key.startsWith(PRESENCE_USER_KEY_PREFIX)) {
-        out.push(key.slice(PRESENCE_USER_KEY_PREFIX.length))
+    for (const [key, set] of this.presenceSets) {
+      if (set.size > 0 && key.startsWith(PRESENCE_SOCKETS_KEY_PREFIX)) {
+        out.push(key.slice(PRESENCE_SOCKETS_KEY_PREFIX.length))
       }
     }
     return out
@@ -132,6 +142,19 @@ async function tryConnectRedisOnce(): Promise<boolean> {
     await Promise.all([cacheRedis.connect(), pubClient.connect(), subClient.connect()])
     await Promise.all([cacheRedis.ping(), pubClient.ping(), subClient.ping()])
     redisAdapterEnabled = true
+    try {
+      const legacy = await cacheRedis.keys(`${LEGACY_PRESENCE_COUNTER_PREFIX}*`)
+      if (legacy.length > 0) {
+        await cacheRedis.del(...legacy)
+        if (env.NODE_ENV === 'development') {
+          console.log(
+            `[Redis] Đã xóa ${legacy.length} key presence cũ (${LEGACY_PRESENCE_COUNTER_PREFIX}*) — chuyển sang SET socket.id`
+          )
+        }
+      }
+    } catch (e) {
+      console.warn('[Redis] Không xóa được key presence:user:* cũ', e)
+    }
     return true
   } catch (err) {
     if (env.NODE_ENV === 'development') {
@@ -206,12 +229,12 @@ export async function getPresenceOnlineUserIds(): Promise<string[]> {
   if (!cacheRedis) {
     throw new Error('Redis chưa được khởi tạo — gọi initRedis() trước')
   }
-  const keys = await cacheRedis.keys(`${PRESENCE_USER_KEY_PREFIX}*`)
+  const keys = await cacheRedis.keys(`${PRESENCE_SOCKETS_KEY_PREFIX}*`)
   const out: string[] = []
   for (const key of keys) {
-    const v = await cacheRedis.get(key)
-    if (v !== null && parseInt(v, 10) > 0) {
-      out.push(key.slice(PRESENCE_USER_KEY_PREFIX.length))
+    const n = await cacheRedis.scard(key)
+    if (n > 0) {
+      out.push(key.slice(PRESENCE_SOCKETS_KEY_PREFIX.length))
     }
   }
   return out

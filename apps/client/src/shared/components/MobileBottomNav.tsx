@@ -47,10 +47,10 @@ export function MobileBottomNav() {
             to={to}
             className={cn(
               'flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 py-1 text-[11px] font-medium leading-tight',
-              active ? 'text-[#0068ff]' : 'text-muted-foreground'
+              active ? 'text-primary' : 'text-muted-foreground'
             )}
           >
-            <Icon className={cn('h-6 w-6 shrink-0', active && 'text-[#0068ff]')} strokeWidth={2} aria-hidden />
+            <Icon className={cn('h-6 w-6 shrink-0', active && 'text-primary')} strokeWidth={2} aria-hidden />
             <span className="max-w-full truncate">{label}</span>
           </NavLink>
         )

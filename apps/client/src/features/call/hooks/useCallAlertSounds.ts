@@ -10,7 +10,7 @@ export function useCallAlertSounds(uiState: VoiceCallUiState) {
     stopCallSound(audioRef.current)
     audioRef.current = null
 
-    if (uiState === 'outgoing') {
+    if (uiState === 'outgoing_ringing') {
       audioRef.current = playLoopingCallSound(CALL_SOUND_URLS.ringback)
     } else if (uiState === 'incoming') {
       audioRef.current = playLoopingCallSound(CALL_SOUND_URLS.bell)

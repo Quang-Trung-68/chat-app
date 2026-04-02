@@ -1,7 +1,7 @@
 /**
  * Reset môi trường dev cho test web-push:
  * 1) Xóa toàn bộ `push_subscriptions` (đăng nhập lại + cho phép thông báo để tạo mới).
- * 2) Xóa mọi key Redis `presence:user:*` (tránh bộ đếm kẹt sau reconnect / HMR).
+ * 2) Xóa mọi key Redis `presence:sockets:*` và legacy `presence:user:*`.
  *
  * Chạy: npx tsx scripts/reset-push-dev.ts
  * Hoặc: npm run push:reset-dev --workspace=apps/server
@@ -13,7 +13,7 @@ import IORedis from 'ioredis'
 
 async function main() {
   console.log('═'.repeat(56))
-  console.log('  reset-push-dev — xóa push_subscriptions + presence:user:*')
+  console.log('  reset-push-dev — xóa push_subscriptions + presence:sockets:* + presence:user:*')
   console.log('═'.repeat(56))
 
   const deletedSubs = await prisma.pushSubscription.deleteMany({})
@@ -21,12 +21,14 @@ async function main() {
 
   const redis = new IORedis(env.REDIS_URL, { maxRetriesPerRequest: null })
   try {
-    const keys = await redis.keys('presence:user:*')
-    if (keys.length > 0) {
-      await redis.del(...keys)
-      console.log(`✓ Đã xóa ${keys.length} key Redis presence:user:*`)
+    const legacy = await redis.keys('presence:user:*')
+    const sockets = await redis.keys('presence:sockets:*')
+    const all = [...legacy, ...sockets]
+    if (all.length > 0) {
+      await redis.del(...all)
+      console.log(`✓ Đã xóa ${all.length} key Redis presence (user:* + sockets:*)`)
     } else {
-      console.log('  (Không có key presence:user:*.)')
+      console.log('  (Không có key presence:user:* / presence:sockets:*.)')
     }
     await redis.quit()
   } catch (e) {

@@ -29,6 +29,8 @@ export const SOCKET_EVENTS = {
   FRIEND_UPDATED: 'friend:updated',
   /** WebRTC voice (DM): relay offer / answer / ICE — payload JSON string. */
   CALL_SIGNAL: 'call:signal',
+  /** Server → người gọi: đối phương trong phòng (có thể đổ chuông). */
+  CALL_RINGING: 'call:ringing',
   /** Kết thúc / từ chối cuộc gọi thoại. */
   CALL_END: 'call:end',
   /**

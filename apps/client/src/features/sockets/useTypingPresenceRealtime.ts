@@ -9,8 +9,9 @@ type PresenceSyncPayload = { userIds: string[] }
 
 /**
  * Lắng nghe typing + presence; cập nhật Zustand; DEV log để verify Bước 8.
+ * Gắn listener ngay khi có `socket` (không chờ `connected`) để không lỡ `presence:sync` gửi ngay sau handshake.
  */
-export function useTypingPresenceRealtime(socket: Socket | null, connected: boolean) {
+export function useTypingPresenceRealtime(socket: Socket | null) {
   const setPresenceOnline = useTypingPresenceStore((s) => s.setPresenceOnline)
   const setPresenceOffline = useTypingPresenceStore((s) => s.setPresenceOffline)
   const syncPresenceOnline = useTypingPresenceStore((s) => s.syncPresenceOnline)
@@ -18,7 +19,7 @@ export function useTypingPresenceRealtime(socket: Socket | null, connected: bool
   const removeTyping = useTypingPresenceStore((s) => s.removeTyping)
 
   useEffect(() => {
-    if (!socket || !connected) return
+    if (!socket) return
 
     const onTypingStart = (p: TypingPayload) => {
       if (!p?.conversationId || !p?.userId) return
@@ -75,7 +76,6 @@ export function useTypingPresenceRealtime(socket: Socket | null, connected: bool
     }
   }, [
     socket,
-    connected,
     addTyping,
     removeTyping,
     setPresenceOnline,

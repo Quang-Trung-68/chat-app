@@ -6,6 +6,7 @@ import { enqueueNotifyMessageJob } from '@/features/push/notifyMessage.queue'
 import { messagesRepository } from './messages.repository'
 import { messageSearchRepository, type MessageSearchRow } from './messageSearch.repository'
 import {
+  buildCallPayloadForDto,
   messageTypeToApiFileType,
   type CreateMessageBody,
   type MessageItemDto,
@@ -191,9 +192,11 @@ function mapRowToDto(
     m.parentId && m.parent ? buildParentPreview(m.parent) : null
   return {
     id: m.id,
+    messageType: m.type,
     content: m.content,
     fileUrl: m.fileUrl,
     fileType: messageTypeToApiFileType(m.type),
+    callPayload: buildCallPayloadForDto(m),
     attachments: m.attachments.map((a) => ({
       id: a.id,
       url: a.url,

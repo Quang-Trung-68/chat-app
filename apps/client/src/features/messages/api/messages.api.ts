@@ -50,6 +50,8 @@ export function normalizeMessagePayload(m: MessageItemDto): MessageItemDto {
       : null
   return {
     ...m,
+    messageType: m.messageType ?? 'TEXT',
+    callPayload: m.callPayload ?? null,
     attachments: Array.isArray(m.attachments) ? m.attachments : [],
     reactionSummary: Array.isArray(m.reactionSummary) ? m.reactionSummary : [],
     myReactionEmoji: m.myReactionEmoji ?? null,

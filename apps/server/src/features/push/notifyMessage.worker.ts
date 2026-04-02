@@ -11,15 +11,18 @@ import {
   NOTIFY_FRIEND_REQUEST_JOB,
   NOTIFY_MESSAGE_JOB,
   NOTIFY_MESSAGE_QUEUE,
+  NOTIFY_MISSED_CALL_JOB,
   type NotifyFriendAcceptedPayload,
   type NotifyFriendRequestPayload,
   type NotifyMessageJobPayload,
+  type NotifyMissedCallPayload,
 } from './notifyMessage.queue'
 
 function previewFromMessage(m: {
   type: MessageType
   content: string | null
 }): string {
+  if (m.type === 'CALL') return 'Cuộc gọi'
   if (m.type === 'IMAGE') return 'Đã gửi ảnh'
   if (m.type === 'FILE') return 'Đã gửi file'
   const c = m.content?.trim()
@@ -156,6 +159,18 @@ async function processFriendRequestJob(jobData: NotifyFriendRequestPayload): Pro
   })
 }
 
+async function processMissedCallJob(jobData: NotifyMissedCallPayload): Promise<void> {
+  const { calleeUserId, callerDisplayLabel, conversationId } = jobData
+  const base = env.CLIENT_URL.replace(/\/$/, '')
+  await sendWebPushToUserIfOffline(calleeUserId, {
+    title: 'Cuộc gọi nhỡ',
+    body: `${callerDisplayLabel} đã gọi cho bạn`,
+    url: `${base}/chat/${conversationId}`,
+    conversationId,
+    kind: 'missed_call',
+  })
+}
+
 async function processFriendAcceptedJob(jobData: NotifyFriendAcceptedPayload): Promise<void> {
   const { recipientIds, title, body, conversationId } = jobData
   const base = env.CLIENT_URL.replace(/\/$/, '')
@@ -199,6 +214,10 @@ export function startNotifyMessageWorker(): void {
       }
       if (job.name === NOTIFY_FRIEND_ACCEPTED_JOB) {
         await processFriendAcceptedJob(job.data as NotifyFriendAcceptedPayload)
+        return
+      }
+      if (job.name === NOTIFY_MISSED_CALL_JOB) {
+        await processMissedCallJob(job.data as NotifyMissedCallPayload)
       }
     },
     { connection }

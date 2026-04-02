@@ -44,8 +44,8 @@ type MessageBubbleActionsProps = {
 
 function iconCircle(mine: boolean) {
   return cn(
-    'h-7 w-7 min-h-7 min-w-7 shrink-0 rounded-full border shadow-sm transition-colors',
-    '[&_svg]:h-3.5 [&_svg]:w-3.5',
+    'h-6 w-6 min-h-6 min-w-6 shrink-0 rounded-full border shadow-sm transition-colors',
+    '[&_svg]:h-3 [&_svg]:w-3',
     mine
       ? [
           'border-zinc-200/70 bg-white/95 text-slate-700',

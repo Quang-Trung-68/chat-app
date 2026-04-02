@@ -7,7 +7,6 @@ import { MAX_PINS_PER_CONVERSATION } from '@chat-app/shared-constants'
 import {
   ChevronDown,
   ChevronLeft,
-  Crown,
   Loader2,
   PanelRight,
   Phone,
@@ -30,15 +29,12 @@ import { useTypingPresenceStore } from '@/features/sockets/typingPresence.store'
 import type { RoomListItem } from '@/features/rooms/types/room.types'
 import type { MessageItemDto } from '@/features/messages/types/message.types'
 import { getDmMentionLine, getRoomTitle } from '../utils/roomTitle'
-import { formatDaySeparator, formatMessageTime } from '../utils/format'
-import { resolveParentPreview } from '../utils/parentPreview'
+import { formatDaySeparator } from '../utils/format'
 import { ChatComposer, type ChatComposerHandle } from './ChatComposer'
 import { ImagePreviewLightbox } from './ImagePreviewLightbox'
-import { MessageImageGrid } from './MessageImageGrid'
-import { MessageQuote } from './MessageQuote'
-import { MessageBubbleActions } from './MessageBubbleActions'
-import { MessageReactionHoverLayer } from './MessageReactions'
 import { OnlinePresenceDot } from './OnlinePresenceDot'
+import { ChatThreadMessageRow } from './chat-thread/ChatThreadMessageRow'
+import { groupMessagesByDay, imageCountForMessage } from './chat-thread/chatThreadMessageUtils'
 import { useRealtimeMessagesStore } from '@/features/messages/store/realtimeMessages.store'
 import { cn } from '@/lib/utils'
 import { EMPTY_STRING_ARRAY } from '@/lib/zustandEmpty'
@@ -62,33 +58,6 @@ type ChatThreadProps = {
 }
 
 const NEAR_BOTTOM_PX = 100
-
-function groupMessagesByDay(messages: MessageItemDto[]) {
-  const groups: { dayKey: string; items: MessageItemDto[] }[] = []
-  for (const m of messages) {
-    const d = new Date(m.createdAt)
-    const dayKey = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
-    const last = groups[groups.length - 1]
-    if (!last || last.dayKey !== dayKey) {
-      groups.push({ dayKey, items: [m] })
-    } else {
-      last.items.push(m)
-    }
-  }
-  return groups
-}
-
-function sortedAttachmentUrls(m: MessageItemDto): string[] {
-  if (!m.attachments?.length) return []
-  return [...m.attachments].sort((a, b) => a.sortOrder - b.sortOrder).map((a) => a.url)
-}
-
-function imageCountForMessage(m: MessageItemDto): number {
-  const urls = sortedAttachmentUrls(m)
-  if (urls.length > 0) return urls.length
-  if (m.fileUrl && m.fileType === 'IMAGE') return 1
-  return 0
-}
 
 export function ChatThread({
   conversationId,
@@ -137,8 +106,6 @@ export function ChatThread({
   mergedRef.current = merged
 
   const [initialRevealDone, setInitialRevealDone] = useState(false)
-  /** visible → fading (opacity) → hidden (unmount) — tránh tắt skeleton đột ngột khi đổi hội thoại */
-  const [skelPhase, setSkelPhase] = useState<'visible' | 'fading' | 'hidden'>('visible')
   const [isNearBottom, setIsNearBottom] = useState(true)
   /** Id tin nhắn cuối khi user còn ở đáy — dùng để phát hiện tin mới khi đã kéo lên. */
   const [anchorAtBottomId, setAnchorAtBottomId] = useState<string | null>(null)
@@ -336,7 +303,6 @@ export function ChatThread({
 
   useEffect(() => {
     setInitialRevealDone(false)
-    setSkelPhase('visible')
     setIsNearBottom(true)
     isNearBottomRef.current = true
     setAnchorAtBottomId(null)
@@ -347,14 +313,6 @@ export function ChatThread({
       fetchHistoryDebounceRef.current = null
     }
   }, [conversationId])
-
-  useEffect(() => {
-    if (!initialRevealDone || skelPhase !== 'visible') return
-    const id = requestAnimationFrame(() => {
-      setSkelPhase('fading')
-    })
-    return () => cancelAnimationFrame(id)
-  }, [initialRevealDone, skelPhase])
 
   /** Cuộn xuống đáy trước khi paint — tắt skeleton sau đó để không thấy hiệu ứng cuộn. */
   useLayoutEffect(() => {
@@ -547,7 +505,7 @@ export function ChatThread({
                 {room?.type === 'DM' && dmPeer?.avatarUrl ? (
                   <AvatarImage src={dmPeer.avatarUrl} alt="" />
                 ) : null}
-                <AvatarFallback className="bg-[#0068ff]/15 text-sm font-medium text-[#0068ff]">
+                <AvatarFallback className="bg-primary/15 text-sm font-medium text-primary">
                   {title.slice(0, 1).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
@@ -571,7 +529,7 @@ export function ChatThread({
                   Đang hoạt động
                 </span>
               ) : null}
-            </div >
+            </div>
           </div>
           <div className="flex shrink-0 items-center gap-0.5">
             <Button
@@ -609,7 +567,7 @@ export function ChatThread({
               size="icon"
               className={cn(
                 'h-11 w-11 lg:h-8 lg:w-8',
-                roomSearchOpen && 'bg-blue-50 text-[#0068ff] hover:bg-blue-100 hover:text-[#0068ff]'
+                roomSearchOpen && 'bg-blue-50 text-primary hover:bg-blue-100 hover:text-primary'
               )}
               onClick={onToggleRoomSearch}
               title="Tìm trong hội thoại"
@@ -624,7 +582,7 @@ export function ChatThread({
               size="icon"
               className={cn(
                 'h-11 w-11 lg:h-8 lg:w-8',
-                rightPanelOpen && 'bg-blue-50 text-[#0068ff] hover:bg-blue-100 hover:text-[#0068ff]'
+                rightPanelOpen && 'bg-blue-50 text-primary hover:bg-blue-100 hover:text-primary'
               )}
               onClick={onToggleRightPanel}
               title="Thông tin hội thoại"
@@ -638,7 +596,7 @@ export function ChatThread({
       <div className="relative min-h-0 flex-1">
         <div
           ref={scrollRef}
-          className="relative h-full min-h-0 scroll-auto overflow-y-auto bg-[#ebf0f5] px-4 py-3"
+          className="relative h-full min-h-0 scroll-auto overflow-y-auto bg-secondary-surface px-4 py-3"
         >
           {isLoadingParentScroll ? (
             <div
@@ -669,14 +627,7 @@ export function ChatThread({
             </div>
           ) : null}
           {!infinite.isLoading && merged.length === 0 && initialRevealDone ? (
-            <p
-              className={cn(
-                'text-center text-sm text-muted-foreground',
-                'motion-safe:animate-in motion-safe:fade-in motion-safe:duration-400 motion-safe:ease-out'
-              )}
-            >
-              Chưa có tin nhắn
-            </p>
+            <p className="text-center text-sm text-muted-foreground">Chưa có tin nhắn</p>
           ) : null}
 
           {initialRevealDone && infinite.isFetchingNextPage ? (
@@ -692,251 +643,41 @@ export function ChatThread({
                       {formatDaySeparator(g.items[0].createdAt)}
                     </span>
                   </div>
-                  <ul className="space-y-3">
-                    {g.items.map((m) => {
-                      const mine = m.sender.id === currentUserId
-                      const senderLabel = displayNameForMessageSender(m.sender, room?.participants)
-                      const isDm = room?.type === 'DM'
-                      const showSenderNameOnBubble = !mine && !isDm
-                      const parentPreview = resolveParentPreview(m, merged)
-                      const isGroupAdminMessage =
-                        room?.type === 'GROUP' &&
-                        groupOwnerId !== undefined &&
-                        m.sender.id === groupOwnerId
-                      return (
-                        <li
-                          key={m.id}
-                          data-message-id={m.id}
-                          className={cn('flex gap-2', mine ? 'flex-row-reverse' : 'flex-row')}
-                        >
-                          {!mine ? (
-                            <div className="relative mt-0.5 h-8 w-8 shrink-0">
-                              <Avatar className="h-8 w-8">
-                                {m.sender.avatarUrl ? (
-                                  <AvatarImage src={m.sender.avatarUrl} alt="" />
-                                ) : null}
-                                <AvatarFallback className="text-[10px]">
-                                  {senderLabel.slice(0, 1).toUpperCase()}
-                                </AvatarFallback>
-                              </Avatar>
-                              {isGroupAdminMessage ? (
-                                <span
-                                  className="pointer-events-none absolute -right-0.5 -top-0.5 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-amber-400/70"
-                                  title="Quản trị viên"
-                                  aria-hidden
-                                >
-                                  <Crown className="h-[7px] w-[7px] text-amber-500" strokeWidth={2.75} />
-                                </span>
-                              ) : null}
-                            </div>
-                          ) : (
-                            <div className="w-8 shrink-0" />
-                          )}
-                          <div
-                            className={cn(
-                              'group/msg flex w-max max-w-[min(100%,28rem)] items-end gap-1.5'
-                            )}
-                          >
-                            {mine ? (
-                              <>
-                                <MessageBubbleActions
-                                  conversationId={conversationId}
-                                  message={m}
-                                  mine={mine}
-                                  isPinned={pinnedIds.has(m.id)}
-                                  pinSlotsLeft={pinSlotsLeft}
-                                  pinPending={pinMut.isPending}
-                                  unpinPending={unpinMut.isPending}
-                                  onReply={() => setReplyingTo(m)}
-                                  onPin={() => pinMut.mutate(m.id)}
-                                  onUnpin={() => unpinMut.mutate(m.id)}
-                                />
-                                <div className="relative w-fit max-w-full min-w-0 pb-3">
-                                  <div
-                                    className={cn(
-                                      'rounded-2xl px-3 py-2 text-sm rounded-br-sm bg-[#0068ff] text-white shadow-sm',
-                                      isGroupAdminMessage && 'ring-2 ring-amber-400/35'
-                                    )}
-                                  >
-                                    {parentPreview ? (
-                                      <div className={cn('mb-2', !mine && '-mx-0.5')}>
-                                        <MessageQuote
-                                          preview={parentPreview}
-                                          mine={mine}
-                                          hideSenderName={isDm}
-                                          onNavigate={
-                                            parentPreview.isDeleted
-                                              ? undefined
-                                              : () => void scrollToMessageInThread(parentPreview.id)
-                                          }
-                                        />
-                                      </div>
-                                    ) : null}
-                                    {showSenderNameOnBubble ? (
-                                      <p className="mb-1 text-xs font-medium text-[#0068ff]">{senderLabel}</p>
-                                    ) : null}
-                                    {m.content ? (
-                                      <p className="whitespace-pre-wrap wrap-break-word">{m.content}</p>
-                                    ) : null}
-                                    {(() => {
-                                      const pending = pendingByMessageId[m.id]
-                                      const serverUrls = sortedAttachmentUrls(m)
-                                      const legacySingle =
-                                        serverUrls.length === 0 &&
-                                          m.fileUrl &&
-                                          m.fileType === 'IMAGE'
-                                          ? [m.fileUrl]
-                                          : []
-                                      const displayUrls =
-                                        serverUrls.length > 0
-                                          ? serverUrls
-                                          : legacySingle.length > 0
-                                            ? legacySingle
-                                            : (pending?.previewUrls ?? [])
-                                      const imageLoading =
-                                        Boolean(pending?.previewUrls?.length) &&
-                                        serverUrls.length === 0 &&
-                                        legacySingle.length === 0
-                                      if (displayUrls.length === 0 && !imageLoading) return null
-                                      return (
-                                        <div className={cn(m.content ? 'mt-2' : '')}>
-                                          <MessageImageGrid
-                                            urls={displayUrls}
-                                            totalCount={displayUrls.length}
-                                            loading={imageLoading}
-                                            onPhotoClick={(idx) =>
-                                              setLightbox({
-                                                urls: displayUrls,
-                                                startIndex: Math.min(idx, displayUrls.length - 1),
-                                              })
-                                            }
-                                          />
-                                        </div>
-                                      )
-                                    })()}
-                                    <div
-                                      className={cn(
-                                        'mt-1 text-[10px]',
-                                        mine ? 'text-white/70' : 'text-muted-foreground/80'
-                                      )}
-                                    >
-                                      <span>{formatMessageTime(m.createdAt)}</span>
-                                    </div>
-                                  </div>
-                                  <MessageReactionHoverLayer message={m} conversationId={conversationId} mine={mine} />
-                                </div>
-                              </>
-                            ) : (
-                              <>
-                                <div className="relative w-fit max-w-full min-w-0 pb-3">
-                                  <div
-                                    className={cn(
-                                      'rounded-2xl px-3 py-2 text-sm rounded-bl-sm border-0 bg-white text-foreground shadow-sm',
-                                      isGroupAdminMessage && 'ring-2 ring-amber-400/30'
-                                    )}
-                                  >
-                                    {parentPreview ? (
-                                      <div className={cn('mb-2', !mine && '-mx-0.5')}>
-                                        <MessageQuote
-                                          preview={parentPreview}
-                                          mine={mine}
-                                          hideSenderName={isDm}
-                                          onNavigate={
-                                            parentPreview.isDeleted
-                                              ? undefined
-                                              : () => void scrollToMessageInThread(parentPreview.id)
-                                          }
-                                        />
-                                      </div>
-                                    ) : null}
-                                    {showSenderNameOnBubble ? (
-                                      <p className="mb-1 text-xs font-medium text-[#0068ff]">{senderLabel}</p>
-                                    ) : null}
-                                    {m.content ? (
-                                      <p className="whitespace-pre-wrap wrap-break-word">{m.content}</p>
-                                    ) : null}
-                                    {(() => {
-                                      const pending = pendingByMessageId[m.id]
-                                      const serverUrls = sortedAttachmentUrls(m)
-                                      const legacySingle =
-                                        serverUrls.length === 0 &&
-                                          m.fileUrl &&
-                                          m.fileType === 'IMAGE'
-                                          ? [m.fileUrl]
-                                          : []
-                                      const displayUrls =
-                                        serverUrls.length > 0
-                                          ? serverUrls
-                                          : legacySingle.length > 0
-                                            ? legacySingle
-                                            : (pending?.previewUrls ?? [])
-                                      const imageLoading =
-                                        Boolean(pending?.previewUrls?.length) &&
-                                        serverUrls.length === 0 &&
-                                        legacySingle.length === 0
-                                      if (displayUrls.length === 0 && !imageLoading) return null
-                                      return (
-                                        <div className={cn(m.content ? 'mt-2' : '')}>
-                                          <MessageImageGrid
-                                            urls={displayUrls}
-                                            totalCount={displayUrls.length}
-                                            loading={imageLoading}
-                                            onPhotoClick={(idx) =>
-                                              setLightbox({
-                                                urls: displayUrls,
-                                                startIndex: Math.min(idx, displayUrls.length - 1),
-                                              })
-                                            }
-                                          />
-                                        </div>
-                                      )
-                                    })()}
-                                    <div
-                                      className={cn(
-                                        'mt-1 text-[10px]',
-                                        mine ? 'text-white/70' : 'text-muted-foreground/80'
-                                      )}
-                                    >
-                                      <span>{formatMessageTime(m.createdAt)}</span>
-                                    </div>
-                                  </div>
-                                  <MessageReactionHoverLayer message={m} conversationId={conversationId} mine={mine} />
-                                </div>
-                                <MessageBubbleActions
-                                  conversationId={conversationId}
-                                  message={m}
-                                  mine={mine}
-                                  isPinned={pinnedIds.has(m.id)}
-                                  pinSlotsLeft={pinSlotsLeft}
-                                  pinPending={pinMut.isPending}
-                                  unpinPending={unpinMut.isPending}
-                                  onReply={() => setReplyingTo(m)}
-                                  onPin={() => pinMut.mutate(m.id)}
-                                  onUnpin={() => unpinMut.mutate(m.id)}
-                                />
-                              </>
-                            )}
-                          </div>
-                        </li>
-                      )
-                    })}
+                  <ul className="space-y-1">
+                    {g.items.map((m) => (
+                      <ChatThreadMessageRow
+                        key={m.id}
+                        message={m}
+                        merged={merged}
+                        currentUserId={currentUserId}
+                        room={room}
+                        groupOwnerId={groupOwnerId}
+                        conversationId={conversationId}
+                        pinnedIds={pinnedIds}
+                        pinSlotsLeft={pinSlotsLeft}
+                        pinPending={pinMut.isPending}
+                        unpinPending={unpinMut.isPending}
+                        onReply={setReplyingTo}
+                        onPin={(id) => pinMut.mutate(id)}
+                        onUnpin={(id) => unpinMut.mutate(id)}
+                        scrollToMessageInThread={scrollToMessageInThread}
+                        pendingByMessageId={pendingByMessageId}
+                        onOpenLightbox={(urls, startIndex) =>
+                          setLightbox({ urls, startIndex })
+                        }
+                        onCallAgain={() => void voice.startOutgoing()}
+                      />
+                    ))}
                   </ul>
                 </div>
               ))}
             </div>
           ) : null}
 
-          {skelPhase !== 'hidden' ? (
+          {!initialRevealDone ? (
             <div
-              className={cn(
-                'pointer-events-none absolute inset-0 z-10 flex flex-col bg-[#ebf0f5] px-4 py-3 backdrop-blur-[2px] transition-opacity duration-300 ease-out',
-                skelPhase === 'fading' ? 'opacity-0' : 'opacity-100'
-              )}
+              className="pointer-events-none absolute inset-0 z-10 flex flex-col bg-secondary-surface px-4 py-3 backdrop-blur-[2px]"
               aria-hidden
-              onTransitionEnd={(e) => {
-                if (e.propertyName !== 'opacity') return
-                if (skelPhase === 'fading') setSkelPhase('hidden')
-              }}
             >
               <div className="space-y-3 py-2">
                 {[1, 2, 3, 4, 5, 6].map((i) => (
@@ -983,7 +724,7 @@ export function ChatThread({
               className="pointer-events-auto flex max-w-[min(100%,24rem)] min-h-[40px] items-center gap-2 rounded-full border border-border bg-white/95 px-4 py-2 text-left text-sm shadow-md backdrop-blur-sm transition-all duration-200 ease-out hover:bg-white hover:shadow-lg active:scale-[0.98]"
             >
               {floatingCenterUi.kind === 'arrow' ? (
-                <ChevronDown className="h-5 w-5 shrink-0 text-[#0068ff]" aria-hidden />
+                <ChevronDown className="h-5 w-5 shrink-0 text-primary" aria-hidden />
               ) : null}
               {floatingCenterUi.kind === 'text' ? (
                 <span className="truncate text-foreground">{floatingCenterUi.text}</span>
@@ -1024,6 +765,7 @@ export function ChatThread({
         error={voice.error}
         isMuted={voice.isMuted}
         callDurationLabel={voice.callDurationLabel}
+        outboundRingProgress={voice.outboundRingProgress}
         remoteAudioRef={voice.remoteAudioRef}
         onAccept={() => void voice.acceptIncoming()}
         onReject={voice.rejectIncoming}

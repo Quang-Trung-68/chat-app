@@ -28,7 +28,7 @@ export function AppShellLayout({ children }: AppShellLayoutProps) {
         onLogout={() => void logout()}
         contactsPendingBadge={contactsPendingBadge}
       />
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">{children}</div>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-secondary-surface">{children}</div>
       <MobileBottomNav />
     </div>
   )

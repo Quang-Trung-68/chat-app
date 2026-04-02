@@ -100,12 +100,10 @@ async function main() {
     const one = await prisma.pushSubscription.findFirst({ select: { userId: true } })
     if (redis && one) {
       const key = presenceUserKey(one.userId)
-      const v = await redis.get(key)
-      console.log(`  Key ${key}`)
-      console.log(`  Giá trị: ${v === null ? '(không có key — coi như offline)' : v}`)
-      console.log(
-        `  → Worker chỉ gửi push khi user không online (presence = 0 / không có key).`
-      )
+      const n = await redis.scard(key)
+      console.log(`  Key ${key} (SET socket.id)`)
+      console.log(`  SCARD: ${n} — ${n === 0 ? 'offline (không gửi push khi đang mở tab)' : 'online'}`)
+      console.log(`  → Worker chỉ gửi push khi SCARD = 0.`)
     } else if (!one) {
       console.log('  ⊘ Không có user nào có subscription để test key.')
     }

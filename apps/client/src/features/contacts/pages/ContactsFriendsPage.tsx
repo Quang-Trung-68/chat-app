@@ -6,6 +6,8 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Skeleton } from '@/components/ui/skeleton'
+import { SearchX, Ghost } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -91,13 +93,38 @@ export function ContactsFriendsPage() {
       <ScrollArea className="min-h-0 flex-1">
         <div className="px-4 py-3">
           {isLoading ? (
-            <p className="text-sm text-muted-foreground">Đang tải…</p>
+            <ul className="space-y-2">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <li key={i} className="flex items-center gap-2 rounded-lg bg-white px-2 py-2 shadow-sm ring-1 ring-border/40">
+                  <Skeleton className="h-10 w-10 shrink-0 rounded-full" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-1/3" />
+                    <Skeleton className="h-3 w-1/4" />
+                  </div>
+                </li>
+              ))}
+            </ul>
           ) : isError ? (
-            <p className="text-sm text-destructive">Không tải được danh sách bạn bè.</p>
+            <div className="flex flex-col items-center justify-center py-10 text-center">
+              <p className="text-sm font-medium text-destructive">Đã xảy ra lỗi</p>
+              <p className="text-xs text-muted-foreground">Không tải được danh sách bạn bè.</p>
+            </div>
           ) : grouped.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              {filter.trim() ? 'Không có bạn bè khớp bộ lọc.' : 'Chưa có bạn bè.'}
-            </p>
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              {filter.trim() ? (
+                <>
+                  <SearchX className="mb-3 h-10 w-10 text-muted-foreground/50" />
+                  <p className="text-sm font-medium text-foreground">Không tìm thấy</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Không có bạn bè khớp bộ lọc "{filter}".</p>
+                </>
+              ) : (
+                <>
+                  <Ghost className="mb-3 h-10 w-10 text-muted-foreground/50" />
+                  <p className="text-sm font-medium text-foreground">Trống</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Chưa có bạn bè.</p>
+                </>
+              )}
+            </div>
           ) : (
             <div className="space-y-5">
               {grouped.map(({ letter, items: rows }) => (
@@ -252,7 +279,7 @@ export function ContactsFriendsPage() {
       </Dialog>
 
       <Dialog open={blockOpen} onOpenChange={setBlockOpen}>
-        <DialogContent className="border-destructive/40 sm:max-w-md">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-destructive">Chặn người này?</DialogTitle>
             <DialogDescription>
@@ -268,7 +295,7 @@ export function ContactsFriendsPage() {
       </Dialog>
 
       <Dialog open={deleteTarget !== null} onOpenChange={(o) => !o && setDeleteTarget(null)}>
-        <DialogContent className="border-destructive/40 sm:max-w-md">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-destructive">Xóa bạn?</DialogTitle>
             <DialogDescription>

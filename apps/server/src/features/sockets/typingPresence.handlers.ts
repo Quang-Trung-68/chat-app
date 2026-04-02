@@ -2,13 +2,11 @@ import type { Server, Socket } from 'socket.io'
 import { typingConversationPayloadSchema } from '@/features/messages/messages.validation'
 import { messagesRepository } from '@/features/messages/messages.repository'
 import { getRedisCache } from '@/config/redis'
+import { presenceUserKey } from '@/features/push/presence.util'
 import { SOCKET_EVENTS } from '@chat-app/shared-constants'
 
 const TYPING_TTL_SEC = 3
-/** Redis key: số kết nối socket đang mở của user (multi-tab). */
-function presenceUserKey(userId: string): string {
-  return `presence:user:${userId}`
-}
+const LEGACY_PRESENCE_COUNTER_PREFIX = 'presence:user:'
 /** Redis key: typing trong conversation. */
 function typingKey(conversationId: string, userId: string): string {
   return `typing:${conversationId}:${userId}`
@@ -79,27 +77,31 @@ export function registerTypingPresenceHandlers(socket: Socket) {
 }
 
 /**
- * Tăng bộ đếm kết nối; nếu lần đầu online → broadcast `presence:online`.
+ * Đăng ký socket vào SET; lần kết nối đầu tiên → broadcast `presence:online`.
+ * Dùng SET theo `socket.id` thay cho INCR/DECR để tránh race async (counter > 0 khi không còn socket).
  */
-export async function onSocketPresenceConnect(io: Server, userId: string): Promise<void> {
+export async function onSocketPresenceConnect(io: Server, socket: Socket, userId: string): Promise<void> {
   const redis = getRedisCache()
-  const n = await redis.incr(presenceUserKey(userId))
-  if (n === 1) {
+  const key = presenceUserKey(userId)
+  await redis.del(`${LEGACY_PRESENCE_COUNTER_PREFIX}${userId}`)
+  const before = await redis.scard(key)
+  await redis.sadd(key, socket.id)
+  const after = await redis.scard(key)
+  if (before === 0 && after > 0) {
     io.emit(SOCKET_EVENTS.PRESENCE_ONLINE, { userId })
   }
 }
 
 /**
- * Giảm bộ đếm; khi về 0 → xóa key và broadcast `presence:offline`.
+ * Gỡ socket khỏi SET; khi không còn socket → broadcast `presence:offline`.
  */
-export async function onSocketPresenceDisconnect(io: Server, userId: string): Promise<void> {
+export async function onSocketPresenceDisconnect(io: Server, socket: Socket, userId: string): Promise<void> {
   const redis = getRedisCache()
   const key = presenceUserKey(userId)
-  const n = await redis.decr(key)
-  if (n <= 0) {
+  await redis.srem(key, socket.id)
+  const after = await redis.scard(key)
+  if (after === 0) {
     await redis.del(key)
-    if (n === 0) {
-      io.emit(SOCKET_EVENTS.PRESENCE_OFFLINE, { userId })
-    }
+    io.emit(SOCKET_EVENTS.PRESENCE_OFFLINE, { userId })
   }
 }

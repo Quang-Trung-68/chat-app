@@ -15,7 +15,7 @@ export function SocketBootstrap() {
   useJoinSocketRooms(socket, connected, rooms)
   useGlobalCallSignals(socket, connected)
   useChatRealtime(socket, connected)
-  useTypingPresenceRealtime(socket, connected)
+  useTypingPresenceRealtime(socket)
   useReceiptRealtime(socket, connected)
   useFriendRealtime(socket, connected)
   useRoomListRealtime(socket, connected)

@@ -141,6 +141,7 @@ export const messagesRepository = {
     fileName: string | null
     fileSize: number | null
     parentId: string | null
+    callId?: string | null
   }) {
     return prisma.message.create({
       data: {
@@ -152,6 +153,7 @@ export const messagesRepository = {
         fileName: input.fileName,
         fileSize: input.fileSize,
         parentId: input.parentId,
+        callId: input.callId ?? undefined,
       },
       select: messageListSelect,
     })

@@ -133,7 +133,7 @@ export function ChatPage() {
             <>
               <button
                 type="button"
-                className="fixed inset-0 z-30 bg-black/40 lg:hidden"
+                className="fixed inset-0 z-30 bg-black/40 lg:hidden animate-in fade-in duration-300"
                 aria-label="Đóng bảng thông tin"
                 onClick={() => setRightOpen(false)}
               />

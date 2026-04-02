@@ -31,7 +31,7 @@ export function ContactsLayout() {
           <ChatGlobalSearchToolbarStandalone />
           <ContactsSubNav />
         </aside>
-        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto bg-[#f4f5f7]">
+        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto bg-secondary-surface">
           <Outlet />
         </main>
       </div>

@@ -28,6 +28,7 @@ enum MessageType {
   IMAGE
   FILE
   SYSTEM
+  CALL
 
   @@map("message_type")
 }
@@ -191,6 +192,7 @@ model Message {
   conversationId String      @map("conversation_id")
   senderId       String      @map("sender_id")
   type           MessageType @default(TEXT)
+  callId         String?     @unique @map("call_id")
   content        String? // null for file-only messages
   fileUrl        String?     @map("file_url") // Cloudinary URL
   fileName       String?     @map("file_name") // original filename

@@ -26,6 +26,7 @@ function previewFromPinnedMessageRow(m: {
   type: MessageType
   attachments: { id: string }[]
 }): string {
+  if (m.type === 'CALL') return 'Cuộc gọi'
   const t = m.content?.trim()
   if (t) return t.length > 120 ? `${t.slice(0, 119)}…` : t
   if (m.attachments.length > 0 || m.type === 'IMAGE') return 'Ảnh'
@@ -89,7 +90,7 @@ export const roomsService = {
         lastMessage: last
           ? {
               id: last.id,
-              content: last.content,
+              content: last.type === 'CALL' ? 'Cuộc gọi' : last.content,
               senderId: last.senderId,
               createdAt: last.createdAt,
               fileType: mapMessageTypeToLastFileType(last.type),

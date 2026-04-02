@@ -42,8 +42,8 @@ export function useReactionApply(message: MessageItemDto, conversationId: string
 
 function iconCircle(mine: boolean) {
   return cn(
-    'h-7 w-7 min-h-7 min-w-7 shrink-0 rounded-full border shadow-sm transition-colors',
-    '[&_svg]:h-3.5 [&_svg]:w-3.5',
+    'h-6 w-6 min-h-6 min-w-6 shrink-0 rounded-full border shadow-sm transition-colors',
+    '[&_svg]:h-3 [&_svg]:w-3',
     mine
       ? [
         'border-zinc-200/70 bg-white/95 text-slate-700',
@@ -166,18 +166,17 @@ export function MessageReactionHoverLayer({
           }}
         >
           {myEmoji ? (
-            <span className="text-[16px] leading-none">{myEmoji}</span>
+            <span className="text-[14px] leading-none">{myEmoji}</span>
           ) : (
-            /* Nền nút trắng — viền like xám (giống Zalo); không dùng trắng thuần vì mất tương phản */
-            <ThumbsUp className="h-3.5 w-3.5 text-zinc-400" strokeWidth={2.25} />
+            <ThumbsUp className="h-3 w-3 text-zinc-400" strokeWidth={2.25} />
           )}
         </Button>
 
         {pickerOpen && !expanded ? (
           <div
             className={cn(
-              'pointer-events-auto absolute bottom-full z-50 mb-1 flex translate-y-0 flex-row items-center gap-0.5 rounded-full border border-zinc-700 bg-zinc-800 px-1 py-0.5 shadow-md',
-              '-right-13'
+              'pointer-events-auto absolute bottom-full z-50 mb-1 flex flex-row items-center gap-0.5 rounded-full border border-zinc-200 bg-white px-1 py-0.5 shadow-lg',
+              mine ? 'right-0' : 'left-0'
             )}
             onMouseDown={(e) => e.stopPropagation()}
           >
@@ -186,7 +185,7 @@ export function MessageReactionHoverLayer({
                 key={item.label}
                 type="button"
                 title={item.label}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[18px] leading-none text-zinc-100 transition-transform duration-150 hover:scale-125 hover:bg-zinc-700"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[18px] leading-none transition-transform duration-150 hover:scale-125 hover:bg-zinc-100"
                 onClick={() => void onPick(item.emoji)}
               >
                 {item.emoji}
@@ -195,7 +194,7 @@ export function MessageReactionHoverLayer({
             <button
               type="button"
               title="Thêm emoji"
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-zinc-300 transition-transform duration-150 hover:scale-110 hover:bg-zinc-700"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-zinc-500 transition-transform duration-150 hover:scale-110 hover:bg-zinc-100"
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation()
@@ -209,15 +208,18 @@ export function MessageReactionHoverLayer({
 
         {pickerOpen && expanded ? (
           <div
-            className="pointer-events-auto absolute bottom-full -right-14 z-50 mb-1 max-h-[min(50vh,280px)] w-[min(90vw,200px)] translate-y-0 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800 shadow-md"
+            className={cn(
+              'pointer-events-auto absolute bottom-full z-50 mb-1 max-h-[min(50vh,280px)] w-[min(90vw,220px)] overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-xl',
+              mine ? 'right-0' : 'left-0'
+            )}
             onMouseDown={(e) => e.stopPropagation()}
           >
-            <div className="grid max-h-[min(44vh,260px)] grid-cols-5 gap-px overflow-y-auto p-1">
+            <div className="grid max-h-[min(44vh,260px)] grid-cols-5 gap-px overflow-y-auto p-1.5">
               {ALLOWED_REACTION_EMOJIS.map((e, idx) => (
                 <button
                   key={`${idx}-${e}`}
                   type="button"
-                  className="flex h-7 w-7 items-center justify-center rounded text-[15px] leading-none text-zinc-100 transition-transform duration-150 hover:scale-105 hover:bg-zinc-700"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-[18px] leading-none transition-transform duration-150 hover:scale-110 hover:bg-zinc-100"
                   onClick={() => void onPick(e)}
                 >
                   {e}

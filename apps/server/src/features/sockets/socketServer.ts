@@ -54,7 +54,7 @@ export function initSocketServer(httpServer: HttpServer) {
     }
 
     try {
-      await onSocketPresenceConnect(io, userId)
+      await onSocketPresenceConnect(io, socket, userId)
     } catch (e) {
       console.error('[Socket] presence connect failed', e)
       socket.disconnect(true)
@@ -75,7 +75,7 @@ export function initSocketServer(httpServer: HttpServer) {
     registerCallHandlers(io, socket)
 
     socket.on('disconnect', () => {
-      void onSocketPresenceDisconnect(io, userId).catch((e) => {
+      void onSocketPresenceDisconnect(io, socket, userId).catch((e) => {
         console.error('[Socket] presence disconnect failed', e)
       })
       if (env.NODE_ENV === 'development') {
