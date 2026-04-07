@@ -32,15 +32,7 @@ RUN cd packages/shared-utils     && npx tsc --project tsconfig.json
 
 # Patch shared package.json so server's tsc resolves compiled dist (not .ts source)
 # This avoids rootDir violations when compiling apps/server
-RUN node -e "
-  ['shared-constants','shared-schemas','shared-types','shared-utils'].forEach(p => {
-    const f = require('path').join('packages', p, 'package.json');
-    const j = JSON.parse(require('fs').readFileSync(f, 'utf8'));
-    j.main = 'dist/index.js';
-    j.types = 'dist/index.d.ts';
-    require('fs').writeFileSync(f, JSON.stringify(j, null, 2));
-  });
-"
+RUN node -e "['shared-constants','shared-schemas','shared-types','shared-utils'].forEach(function(p){var f=require('path').join('packages',p,'package.json');var j=JSON.parse(require('fs').readFileSync(f,'utf8'));j.main='dist/index.js';j.types='dist/index.d.ts';require('fs').writeFileSync(f,JSON.stringify(j,null,2));});"
 
 # Copy server source
 COPY apps/server apps/server
